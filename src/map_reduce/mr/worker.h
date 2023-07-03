@@ -49,8 +49,8 @@ class Worker {
   //定义的两个函数指针用于动态加载动态库里的map和reduce函数
   using MapFunc = std::vector<KeyValue> (*)(KeyValue);
   using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
-  static MapFunc map_func;
-  static ReduceFunc reduce_func;
+  MapFunc map_func;
+  ReduceFunc reduce_func;
   static constexpr int MAX_REDUCE_NUM = 15;
   //mutex_和cond_要在类外用到, 所以我放在public，暂时没想到更好的设计
   //所有的map线程和reduce线程共享一个互斥量，所以锁的粒度要尽可能小

@@ -1,6 +1,9 @@
 #include "worker.h"
 
+//static member initialsize
 int Worker::map_id_ = 0;
+std::mutex Worker::mutex_;
+std::condition_variable Worker::cond_;
 
 //TODO:Ihash有什么用
 //对每个字符串求hash找到其对应要分配的reduce线程

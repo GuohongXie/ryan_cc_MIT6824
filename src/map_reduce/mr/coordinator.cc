@@ -147,7 +147,7 @@ bool Coordinator::IsMapDone() {
 }
 
 int Coordinator::AssignReduceTask() {
-  if (Done()) return -1;
+  if (IsAllMapAndReduceDone()) return -1;
   if (!reduce_index_.empty()) {
     std::unique_lock<std::mutex> lock(mutex_);
     int reduce_idx = reduce_index_.back();  //取出reduce编号

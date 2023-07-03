@@ -1,6 +1,5 @@
 #include "worker.h"
-#include "buttonrpc.hpp"
-#include <string>
+#include "worker.cc"
 
 //下面这俩行写在worker.h文件里面了，可移植性更好
 //using MapFunc = std::vector<KeyValue> (*)(KeyValue);
@@ -21,13 +20,13 @@ int main() {
     cerr << "Cannot open library: " << dlerror() << '\n';
     exit(-1);
   }
-  Worker::map_func = (MapFunc)dlsym(handle, "MapFunc");
+  worker.map_func = (MapFunc)dlsym(handle, "MapFunc");
   if (!worker.map_func) {
     cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
     dlclose(handle);
     exit(-1);
   }
-  Worker::reduce_func = (ReduceFunc)dlsym(handle, "ReduceFunc");
+  worker.reduce_func = (ReduceFunc)dlsym(handle, "ReduceFunc");
   if (!worker.reduce_func) {
     cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
     dlclose(handle);

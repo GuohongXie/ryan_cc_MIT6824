@@ -37,7 +37,7 @@ set(CXX_FLAGS
 add_executable(mrcoordinator ${MAIN_COORDINATOR} ${CC_COORDINATOR})
 target_link_libraries(mrcoordinator pthread -lzmq)
 
-add_executable(mrworker ${MAIN_WORKER} ${CC_WORKER})
+add_executable(mrworker ${MAIN_WORKER})
 target_link_libraries(mrworker pthread -ldl -lzmq)
 
 
