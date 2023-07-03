@@ -8,6 +8,7 @@ project(ryan_map_reduce C CXX)
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr
     ${PROJECT_SOURCE_DIR}/../../src/buttonrpc
+    ${PROJECT_SOURCE_DIR}/../../src/buttonrpc/depends
     )
 
 
@@ -34,10 +35,10 @@ set(CXX_FLAGS
 #include_directories(${Boost_INCLUDE_DIRS})
 
 add_executable(mrcoordinator ${MAIN_COORDINATOR} ${CC_COORDINATOR})
-target_link_libraries(mrcoordinator pthread)
+target_link_libraries(mrcoordinator pthread -lzmq)
 
 add_executable(mrworker ${MAIN_WORKER} ${CC_WORKER})
-target_link_libraries(mrworker pthread)
+target_link_libraries(mrworker pthread -ldl -lzmq)
 
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

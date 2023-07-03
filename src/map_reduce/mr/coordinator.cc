@@ -168,7 +168,7 @@ void Coordinator::SetReduceStat(int task_index) {
   return;
 }
 
-bool Coordinator::Done() {
+bool Coordinator::IsAllMapAndReduceDone() {
   std::lock_guard<std::mutex> lock(mutex_);
   return finished_reduce_task_.size() == reduce_num_;
 }

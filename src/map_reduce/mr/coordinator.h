@@ -1,3 +1,6 @@
+#ifndef RYAN_DS_MAP_REDUCE_MR_COORDINATOR_H_
+#define RYAN_DS_MAP_REDUCE_MR_COORDINATOR_H_
+
 #include <unistd.h>  // ::sleep()
 
 //#include <iostream>
@@ -31,7 +34,7 @@ class Coordinator {
   void SetReduceStat(int task_index);  //设置特定reduce任务完成的函数，RPC
   void WaitMap(std::string file_name);
   void WaitReduce(int reduce_idx);
-  bool Done();  //判断reduce任务是否已经完成
+  bool IsAllMapAndReduceDone();  //判断reduce任务是否已经完成
   bool GetFinalStat() {  //所有任务是否完成，实际上reduce完成就完成了，有点小重复
     return done_;
   }
@@ -54,3 +57,6 @@ class Coordinator {
   int curr_reduce_index_;  //当前处理第几个reduce任务
   std::vector<int> running_reduce_work_;  //正在处理的reduce任务，分配出去就加到这个队列，用于判断超时处理重发
 };
+
+
+#endif //RYAN_DS_MAP_REDUCE_MR_COORDINATOR_H_

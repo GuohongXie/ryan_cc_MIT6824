@@ -2,16 +2,15 @@
 #include "buttonrpc.hpp"
 #include <string>
 
-using MapFunc = std::vector<KeyValue> (*)(KeyValue);
-using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
+//下面这俩行写在worker.h文件里面了，可移植性更好
+//using MapFunc = std::vector<KeyValue> (*)(KeyValue);
+//using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
 
 const std::string LIB_CACULATE_PATH_STRING = "./libmap_reduce.so";  //用于加载的动态库的路径
 const int RPC_COORDINATOR_SERVER_PORT = 5555;
 const std::string RPC_COORDINATOR_SERVER_IP = "127.0.0.1";
 
 
-std::mutex mutex1;
-std::condition_variable cond1;
 
 int main() {
   Worker worker(RPC_COORDINATOR_SERVER_IP, RPC_COORDINATOR_SERVER_PORT, 0, 0, 0, 0);
@@ -48,22 +47,29 @@ int main() {
   worker.RemoveOutputFiles();  //清理上次输出的最终文件
 
   // 创建多个 map 及 reduce 的 worker 线程
-  std::vector<std::thread> map_threads(worker.map_task_num());
-  std::vector<std::thread> reduce_threads(worker.reduce_task_num());
+  //TODO:易错，不能直接创建线程，std::thread对象不可复制
+  //以下是错误用法:
+  //std::vector<std::thread> map_threads(worker.map_task_num());
+  //std::vector<std::thread> reduce_threads(worker.reduce_task_num());
+  std::vector<std::thread> map_threads;
+  map_threads.resize(worker.map_task_num());
+  std::vector<std::thread> reduce_threads;
+  reduce_threads.resize(worker.reduce_task_num());
+
   for (int i = 0; i < map_task_num_tmp; i++) {
-    map_threads[i] = std::thread(&Worker::MapWorker, &worker);
+    map_threads.emplace_back(std::thread(&Worker::MapWorker, &worker, nullptr));
     map_threads[i].detach();
   }
-  std::unique_lock<std::mutex> lock1(mutex1);
-  cond1.wait(lock1);
+  std::unique_lock<std::mutex> lock1(Worker::mutex_);
+  Worker::cond_.wait(lock1);
   lock1.unlock();
   for (int i = 0; i < reduce_task_num_tmp; i++) {
-    reduce_threads[i] = std::thread(&Worker::ReduceWorker,  &worker);
+    reduce_threads.emplace_back(std::thread(&Worker::ReduceWorker, &worker, nullptr));
     reduce_threads[i].detach();
   }
 
   // 循环检查任务是否完成
-  while (!worker_client.call<bool>("Done").val()) {
+  while (!worker_client.call<bool>("IsAllMapAndReduceDone").val()) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 

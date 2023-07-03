@@ -1,3 +1,7 @@
+#ifndef RYAN_DS_MAP_REDUCE_MR_WORKER_H_
+#define RYAN_DS_MAP_REDUCE_MR_WORKER_H_
+//TODO:差点忘了头文件保护，写任何头文件的第一步就是写头文件保护
+
 #include <dirent.h>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -48,8 +52,12 @@ class Worker {
   static MapFunc map_func;
   static ReduceFunc reduce_func;
   static constexpr int MAX_REDUCE_NUM = 15;
+  //mutex_和cond_要在类外用到, 所以我放在public，暂时没想到更好的设计
+  //所有的map线程和reduce线程共享一个互斥量，所以锁的粒度要尽可能小
+  static std::mutex mutex_;
+  static std::condition_variable cond_;
 
-  Worker(std::string& rpc_coordinator_server_ip,
+  Worker(const std::string& rpc_coordinator_server_ip, //TODO:容易忘记const
          int rpc_coordinator_server_port,
          int disabled_map_id,     //用于人为让特定map任务超时的Id
          int disabled_reduce_id,  //用于人为让特定reduce任务超时的Id
@@ -92,8 +100,7 @@ class Worker {
   std::vector<std::string> Split(std::string text, char op); //以char类型的op为分割拆分字符串
   std::string Split(std::string text); //以char类型的op为分割拆分字符串
 
-  std::mutex mutex_;
-  std::condition_variable cond_;
+  
   int disabled_map_id_;     //用于人为让特定map任务超时的Id
   int disabled_reduce_id_;  //用于人为让特定reduce任务超时的Id
   int map_task_num_;  //由coordinator分配，通过main函数的rpc从coordinator获取
@@ -107,3 +114,5 @@ class Worker {
   const int kRpcCoordinatorServerPort_;  //所以MapWorker和ReduceWorker共用一个server,故只需指定一个ip和port
 };
   
+
+#endif //RYAN_DS_MAP_REDUCE_MR_WORKER_H_

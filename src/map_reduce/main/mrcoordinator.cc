@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
   coordinator_server.bind("IsMapDone", &Coordinator::IsMapDone, &coordinator);
   coordinator_server.bind("AssignReduceTask", &Coordinator::AssignReduceTask, &coordinator);
   coordinator_server.bind("SetReduceStat", &Coordinator::SetReduceStat, &coordinator);
-  coordinator_server.bind("Done", &Coordinator::Done, &coordinator);
+  coordinator_server.bind("IsAllMapAndReduceDone", &Coordinator::IsAllMapAndReduceDone, &coordinator);
   coordinator_server.run();
   return 0;
 }
