@@ -5,9 +5,9 @@
 using MapFunc = std::vector<KeyValue> (*)(KeyValue);
 using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
 
-constexpr std::string LIB_CACULATE_PATH_STRING = "./libmap_reduce.so"  //用于加载的动态库的路径
-constexpr int RPC_SERVER_PORT = 5555;
-constexpr std::string RPC_SERVER_IP = "127.0.0.1";
+const std::string LIB_CACULATE_PATH_STRING = "./libmap_reduce.so";  //用于加载的动态库的路径
+const int RPC_SERVER_PORT = 5555;
+const std::string RPC_SERVER_IP = "127.0.0.1";
 
 
 std::mutex mutex1;

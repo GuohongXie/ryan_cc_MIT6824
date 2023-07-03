@@ -49,16 +49,22 @@ class Worker {
   static ReduceFunc reduce_func;
   static constexpr int MAX_REDUCE_NUM = 15;
 
-  Worker(int disabled_map_id,     //用于人为让特定map任务超时的Id
+  Worker(std::string& rpc_coordinator_server_ip,
+         int rpc_coordinator_server_port,
+         int disabled_map_id,     //用于人为让特定map任务超时的Id
          int disabled_reduce_id,  //用于人为让特定reduce任务超时的Id
          int map_task_num,
          int reduce_task_num) 
-      : disabled_map_id_(disabled_map_id),
+      : kRpcCoordinatorServerIp_(rpc_coordinator_server_ip),
+        kRpcCoordinatorServerPort_(rpc_coordinator_server_port),
+        disabled_map_id_(disabled_map_id),
         disabled_reduce_id_(disabled_reduce_id),
         map_task_num_(map_task_num),
         reduce_task_num_(reduce_task_num) {}
   Worker() 
-      : disabled_map_id_(0),
+      : kRpcCoordinatorServerIp_("127.0.0.1"),
+        kRpcCoordinatorServerPort_(5555),
+        disabled_map_id_(0),
         disabled_reduce_id_(0),
         map_task_num_(0),
         reduce_task_num_(0) {}
@@ -93,5 +99,11 @@ class Worker {
   int map_task_num_;  //由coordinator分配，通过main函数的rpc从coordinator获取
   int reduce_task_num_;  //由coordinator分配，通过main函数的rpc从coordinator获取
   static int map_id_;  //给每个线程分配任务的id，用于写中间文件的命名
+  //const成员函数在构造函数的初始化列表中进行初始化，不能在构造函数的函数体初始化，也不能类内初始化
+  //TODO: c++11开始const成员函数可以类内初始化
+  //但是需要注意的是一旦在构造函数初始化列表中进行const成员变量的初始化，就不能同时有类内初始化
+  //不然编译期错误
+  const std::string kRpcCoordinatorServerIp_;  //因为只有一个coordinator
+  const int kRpcCoordinatorServerPort_;  //所以MapWorker和ReduceWorker共用一个server,故只需指定一个ip和port
 };
   

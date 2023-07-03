@@ -178,21 +178,21 @@ std::vector<KeyValue> Worker::MyShuffle(int reduce_task_num) {
 
 void* Worker::MapWorker(void* arg) {
   // 1、初始化client连接用于后续RPC;获取自己唯一的MapTaskID
-  buttonrpc client;
-  client.as_client("127.0.0.1", 5555);
+  buttonrpc map_worker_client;
+  map_worker_client.as_client(kRpcCoordinatorServerIp_, kRpcCoordinatorServerPort_);
   std::unique_lock<std::mutex> lock(mutex_);
   int map_task_index = map_id_++;
   lock.unlock();
   bool ret = false;
   while (1) {
     // 2、通过RPC从Master获取任务
-    // client.set_timeout(10000);
-    ret = client.call<bool>("IsMapDone").val();
+    // map_worker_client.set_timeout(10000);
+    ret = map_worker_client.call<bool>("IsMapDone").val();
     if (ret) {
       cond_.notify_all(); // TODO: why?
       return nullptr;
     }
-    std::string task_tmp = client.call<std::string>("AssignTask").val();  //通过RPC返回值取得任务，在map中即为文件名
+    std::string task_tmp = map_worker_client.call<std::string>("AssignTask").val();  //通过RPC返回值取得任务，在map中即为文件名
     if (task_tmp == "empty") continue;
     printf("%d get the task : %s\n", map_task_index, task_tmp.c_str());
     lock.lock();
@@ -224,7 +224,7 @@ void* Worker::MapWorker(void* arg) {
 
     // 5、发送RPC给master告知任务已完成
     printf("%d finish the task : %s\n", map_task_index, task_tmp.c_str());
-    client.call<void>("SetMapStat", task_tmp);
+    map_worker_client.call<void>("SetMapStat", task_tmp);
   }
 }
 
@@ -245,16 +245,16 @@ void Worker::MyWrite(int fd, std::vector<std::string>& str) {
 
 void* Worker::ReduceWorker(void* arg) {
   // RemoveTmpFiles();
-  buttonrpc client;
-  client.as_client("127.0.0.1", 5555);
+  buttonrpc reduce_worker_client;
+  reduce_worker_client.as_client(kRpcCoordinatorServerIp_, kRpcCoordinatorServerPort_);
   bool ret = false;
   while (1) {
     //若工作完成直接退出reduce的worker线程
-    ret = client.call<bool>("Done").val();
+    ret = reduce_worker_client.call<bool>("Done").val();
     if (ret) {
       return nullptr;
     }
-    int reduce_task_index = client.call<int>("AssignReduceTask").val();
+    int reduce_task_index = reduce_worker_client.call<int>("AssignReduceTask").val();
     if (reduce_task_index == -1) continue;
     printf("%ld get the task%d\n", pthread_self(), reduce_task_index);
     //TODO: mistake
@@ -287,7 +287,7 @@ void* Worker::ReduceWorker(void* arg) {
     MyWrite(fd, str);
     close(fd);
     printf("%ld finish the task%d\n", pthread_self(), reduce_task_index);
-    client.call<bool>(
+    reduce_worker_client.call<bool>(
         "SetReduceStat",
         reduce_task_index);  //最终文件写入磁盘并发起RPCcall修改reduce状态
   }
@@ -303,69 +303,3 @@ void Worker::RemoveOutputFiles() {
   }
 }
 
-
-#define LIB_CACULATE_PATH "./libmap_reduce.so"  //用于加载的动态库的路径
-
-std::mutex mutex1;
-std::condition_variable cond1;
-
-int main() {
-  Worker worker;
-
-
-  //运行时从动态库中加载map及reduce函数(根据实际需要的功能加载对应的Func)
-  void* handle = dlopen(LIB_CACULATE_PATH, RTLD_LAZY);
-  if (!handle) {
-    cerr << "Cannot open library: " << dlerror() << '\n';
-    exit(-1);
-  }
-  Worker::map_func = (MapFunc)dlsym(handle, "MapFunc");
-  if (!worker.map_func) {
-    cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
-    dlclose(handle);
-    exit(-1);
-  }
-  Worker::reduce_func = (ReduceFunc)dlsym(handle, "ReduceFunc");
-  if (!worker.reduce_func) {
-    cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
-    dlclose(handle);
-    exit(-1);
-  }
-
-  //作为RPC请求端
-  buttonrpc work_client;
-  work_client.as_client("127.0.0.1", 5555);
-  work_client.set_timeout(5000);
-  int map_task_num_tmp = work_client.call<int>("map_num").val();
-  int reduce_task_num_tmp = work_client.call<int>("reduce_num").val();
-  worker.set_map_task_num(map_task_num_tmp);
-  worker.set_reduce_task_num(reduce_task_num_tmp);
-  worker.RemoveTmpFiles();        //若有，则清理上次输出的中间文件
-  worker.RemoveOutputFiles();  //清理上次输出的最终文件
-
-  // 创建多个 map 及 reduce 的 worker 线程
-  std::vector<std::thread> map_threads(worker.map_task_num());
-  std::vector<std::thread> reduce_threads(worker.reduce_task_num());
-  for (int i = 0; i < map_task_num_tmp; i++) {
-    map_threads[i] = std::thread(&Worker::MapWorker, &worker);
-    map_threads[i].detach();
-  }
-  std::unique_lock<std::mutex> lock1(mutex1);
-  cond1.wait(lock1);
-  lock1.unlock();
-  for (int i = 0; i < reduce_task_num_tmp; i++) {
-    reduce_threads[i] = std::thread(&Worker::ReduceWorker,  &worker);
-    reduce_threads[i].detach();
-  }
-
-  // 循环检查任务是否完成
-  while (!work_client.call<bool>("Done").val()) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
-
-  // 任务完成后清理中间文件，关闭打开的动态库，释放资源
-  worker.RemoveTmpFiles();
-  ::dlclose(handle);
-}
-
-  
