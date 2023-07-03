@@ -6,15 +6,15 @@ using MapFunc = std::vector<KeyValue> (*)(KeyValue);
 using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
 
 const std::string LIB_CACULATE_PATH_STRING = "./libmap_reduce.so";  //用于加载的动态库的路径
-const int RPC_SERVER_PORT = 5555;
-const std::string RPC_SERVER_IP = "127.0.0.1";
+const int RPC_COORDINATOR_SERVER_PORT = 5555;
+const std::string RPC_COORDINATOR_SERVER_IP = "127.0.0.1";
 
 
 std::mutex mutex1;
 std::condition_variable cond1;
 
 int main() {
-  Worker worker;
+  Worker worker(RPC_COORDINATOR_SERVER_IP, RPC_COORDINATOR_SERVER_PORT, 0, 0, 0, 0);
 
   //运行时从动态库中加载map及reduce函数(根据实际需要的功能加载对应的Func)
   void* handle = dlopen(LIB_CACULATE_PATH_STRING.c_str(), RTLD_LAZY);
@@ -37,8 +37,9 @@ int main() {
 
   //作为RPC请求端
   buttonrpc worker_client;
-  worker_client.as_client(RPC_SERVER_IP.c_str(), RPC_SERVER_PORT);
+  worker_client.as_client(RPC_COORDINATOR_SERVER_IP, RPC_COORDINATOR_SERVER_PORT);
   worker_client.set_timeout(5000);
+  //获取rpc_coordinator_server提供的map_num和reduce_num并写入worker的成员变量
   int map_task_num_tmp = worker_client.call<int>("map_num").val();
   int reduce_task_num_tmp = worker_client.call<int>("reduce_num").val();
   worker.set_map_task_num(map_task_num_tmp);
