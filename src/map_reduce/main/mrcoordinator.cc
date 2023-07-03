@@ -4,7 +4,7 @@ constexpr int RPC_SERVER_PORT = 5555;
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
-    printf("missing parameter! The format is ./coordinator pg*.txt");
+    printf("missing parameter! The format is ./mrcoordinator pg*.txt");
     exit(-1);
   }
   // alarm(10);

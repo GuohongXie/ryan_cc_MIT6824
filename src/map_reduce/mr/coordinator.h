@@ -37,8 +37,8 @@ class Coordinator {
   }
 
  private:
-  constexpr int MAP_TASK_TIMEOUT = 3;
-  constexpr int REDUCE_TASK_TIMEOUT = 5;
+  static constexpr int MAP_TASK_TIMEOUT = 3;
+  static constexpr int REDUCE_TASK_TIMEOUT = 5;
   std::mutex mutex_;
   //std::condition_variable cv_;
   bool done_;

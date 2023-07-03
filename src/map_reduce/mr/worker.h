@@ -47,7 +47,7 @@ class Worker {
   using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
   static MapFunc map_func;
   static ReduceFunc reduce_func;
-  constexpr int MAX_REDUCE_NUM = 15;
+  static constexpr int MAX_REDUCE_NUM = 15;
 
   Worker(int disabled_map_id,     //用于人为让特定map任务超时的Id
          int disabled_reduce_id,  //用于人为让特定reduce任务超时的Id

@@ -2,11 +2,11 @@
 cmake_minimum_required(VERSION 3.0)
 
 # 设置项目名称
-project(ryan_ds_map_reduce C CXX)
+project(ryan_map_reduce C CXX)
 
 # 添加搜索路径
 include_directories(
-    ${PROJECT_SOURCE_DIR}/../../src/map_reduce
+    ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr
     ${PROJECT_SOURCE_DIR}/../../src/buttonrpc
     )
 
@@ -16,7 +16,10 @@ include_directories(
 #aux_source_directory(${PROJECT_SOURCE_DIR}/ryan_network/logger SRC_LOGGER)
 #aux_source_directory(${PROJECT_SOURCE_DIR}/ryan_network/logger SRC_LOGGER)
 #如果想要不包含子目录下的文件，则使用file
-file(GLOB SRC_BASE ${PROJECT_SOURCE_DIR}/../../src/map_reduce/*.cc)
+file(GLOB CC_COORDINATOR ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr/coordinator.cc)
+file(GLOB CC_WORKER ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr/worker.cc)
+file(GLOB MAIN_COORDINATOR ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrcoordinator.cc)
+file(GLOB MAIN_WORKER ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker.cc)
 
 # 设置编译选项
 set(CXX_FLAGS
@@ -30,16 +33,13 @@ set(CXX_FLAGS
 #find_library(BOOST_TEST_LIBRARY NAMES boost_unit_test_framework)
 #include_directories(${Boost_INCLUDE_DIRS})
 
-# 生成动态库 ryan_network
-#add_library(ryan_network SHARED 
-#            ${SRC_BASE}
-#            ${SRC_TIMER}
-#            )
+add_executable(mrcoordinator ${MAIN_COORDINATOR} ${CC_COORDINATOR})
+target_link_libraries(mrcoordinator pthread)
 
-# 目标动态库所需连接的库（这里需要连接libpthread.so）
-target_link_libraries(ryan_network pthread mysqlclient)
+add_executable(mrworker ${MAIN_WORKER} ${CC_WORKER})
+target_link_libraries(mrworker pthread)
 
-# 设置生成动态库的路径，放在根目录的lib文件夹下面
+
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
