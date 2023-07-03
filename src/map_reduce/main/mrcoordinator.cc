@@ -8,18 +8,18 @@ int main(int argc, char* argv[]) {
     exit(-1);
   }
   // alarm(10);
-  buttonrpc server;
-  server.as_server(RPC_SERVER_PORT);
+  buttonrpc coordinator_server;
+  coordinator_server.as_server(RPC_SERVER_PORT);
   Coordinator coordinator(13, 9);  //map_num, reduce_num
   coordinator.GetAllFile(argc, argv);
-  server.bind("map_num", &Coordinator::map_num, &coordinator);
-  server.bind("reduce_num", &Coordinator::reduce_num, &coordinator);
-  server.bind("AssignTask", &Coordinator::AssignTask, &coordinator);
-  server.bind("SetMapStat", &Coordinator::SetMapStat, &coordinator);
-  server.bind("IsMapDone", &Coordinator::IsMapDone, &coordinator);
-  server.bind("AssignReduceTask", &Coordinator::AssignReduceTask, &coordinator);
-  server.bind("SetReduceStat", &Coordinator::SetReduceStat, &coordinator);
-  server.bind("Done", &Coordinator::Done, &coordinator);
-  server.run();
+  coordinator_server.bind("map_num", &Coordinator::map_num, &coordinator);
+  coordinator_server.bind("reduce_num", &Coordinator::reduce_num, &coordinator);
+  coordinator_server.bind("AssignTask", &Coordinator::AssignTask, &coordinator);
+  coordinator_server.bind("SetMapStat", &Coordinator::SetMapStat, &coordinator);
+  coordinator_server.bind("IsMapDone", &Coordinator::IsMapDone, &coordinator);
+  coordinator_server.bind("AssignReduceTask", &Coordinator::AssignReduceTask, &coordinator);
+  coordinator_server.bind("SetReduceStat", &Coordinator::SetReduceStat, &coordinator);
+  coordinator_server.bind("Done", &Coordinator::Done, &coordinator);
+  coordinator_server.run();
   return 0;
 }

@@ -22,7 +22,7 @@ file(GLOB SRC_BASE ${PROJECT_SOURCE_DIR}/../../src/map_reduce/*.cc)
 set(CXX_FLAGS
     -g
     -Wall
-    -std=c++11
+    -std=c++17
     -O0
     )
 
