@@ -25,10 +25,13 @@ mkdir -p $BUILD_DIR/$BUILD_TYPE \
            $SOURCE_DIR \
   && make $*
 
-cp ./bin/mrcoordinator ../../main/mrcoodinator
+cp ./bin/mrcoordinator ../../main/mrcoordinator
 cp ./bin/mrworker ../../main/mrworker
 cp ./bin/mrworker_raw ../../main/mrworker_raw
+cp ./bin/mrcoordinator_raw ../../main/mrcoordinator_raw
 
+cp ./bin/mrworker_pure_raw ../../main/mrworker_pure_raw
+cp ./bin/mrcoordinator_pure_raw ../../main/mrcoordinator_pure_raw
 
 # Use the following command to run all the unit tests
 # at the dir $BUILD_DIR/$BUILD_TYPE :
