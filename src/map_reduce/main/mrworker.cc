@@ -50,21 +50,21 @@ int main() {
   //以下是错误用法:
   //std::vector<std::thread> map_threads(worker.map_task_num());
   //std::vector<std::thread> reduce_threads(worker.reduce_task_num());
-  std::vector<std::thread> map_threads;
-  map_threads.resize(worker.map_task_num());
-  std::vector<std::thread> reduce_threads;
-  reduce_threads.resize(worker.reduce_task_num());
+
+  //貌似不需要以下几行
+  //std::vector<std::thread> map_threads;
+  //map_threads.resize(worker.map_task_num());
+  //std::vector<std::thread> reduce_threads;
+  //reduce_threads.resize(worker.reduce_task_num());
 
   for (int i = 0; i < map_task_num_tmp; i++) {
-    map_threads.emplace_back(std::thread(&Worker::MapWorker, &worker, nullptr));
-    map_threads[i].detach();
+    std::thread(&Worker::MapWorker, &worker, nullptr).detach();
   }
   std::unique_lock<std::mutex> lock1(Worker::mutex_);
   Worker::cond_.wait(lock1);
   lock1.unlock();
   for (int i = 0; i < reduce_task_num_tmp; i++) {
-    reduce_threads.emplace_back(std::thread(&Worker::ReduceWorker, &worker, nullptr));
-    reduce_threads[i].detach();
+    std::thread(&Worker::ReduceWorker, &worker, nullptr).detach();
   }
 
   // 循环检查任务是否完成

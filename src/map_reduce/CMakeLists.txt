@@ -21,6 +21,7 @@ file(GLOB CC_COORDINATOR ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr/coordinat
 file(GLOB CC_WORKER ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr/worker.cc)
 file(GLOB MAIN_COORDINATOR ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrcoordinator.cc)
 file(GLOB MAIN_WORKER ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker.cc)
+file(GLOB MAIN_WORKER_RAW ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker_raw.cc)
 
 # 设置编译选项
 set(CXX_FLAGS
@@ -40,6 +41,8 @@ target_link_libraries(mrcoordinator pthread -lzmq)
 add_executable(mrworker ${MAIN_WORKER})
 target_link_libraries(mrworker pthread -ldl -lzmq)
 
+add_executable(mrworker_raw ${MAIN_WORKER_RAW})
+target_link_libraries(mrworker_raw pthread -ldl -lzmq)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)

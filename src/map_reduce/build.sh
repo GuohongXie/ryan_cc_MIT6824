@@ -27,6 +27,8 @@ mkdir -p $BUILD_DIR/$BUILD_TYPE \
 
 cp ./bin/mrcoordinator ../../main/mrcoodinator
 cp ./bin/mrworker ../../main/mrworker
+cp ./bin/mrworker_raw ../../main/mrworker_raw
+
 
 # Use the following command to run all the unit tests
 # at the dir $BUILD_DIR/$BUILD_TYPE :

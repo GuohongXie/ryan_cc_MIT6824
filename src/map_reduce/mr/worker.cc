@@ -253,7 +253,7 @@ void* Worker::ReduceWorker(void* arg) {
   bool ret = false;
   while (1) {
     //若工作完成直接退出reduce的worker线程
-    ret = reduce_worker_client.call<bool>("Done").val();
+    ret = reduce_worker_client.call<bool>("IsAllMapAndReduceDone").val();
     if (ret) {
       return nullptr;
     }
