@@ -27,6 +27,7 @@ mkdir -p $BUILD_DIR/$BUILD_TYPE \
 
 cp ./bin/mrcoordinator ../../main/mrcoordinator
 cp ./bin/mrworker ../../main/mrworker
+
 cp ./bin/mrworker_raw ../../main/mrworker_raw
 cp ./bin/mrcoordinator_raw ../../main/mrcoordinator_raw
 

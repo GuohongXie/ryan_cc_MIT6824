@@ -40,21 +40,20 @@ set(CXX_FLAGS
 
 add_executable(mrcoordinator ${MAIN_COORDINATOR} ${CC_COORDINATOR})
 target_link_libraries(mrcoordinator pthread -lzmq)
-
 add_executable(mrworker ${MAIN_WORKER})
 target_link_libraries(mrworker pthread -ldl -lzmq)
 
 add_executable(mrworker_raw ${MAIN_WORKER_RAW})
 target_link_libraries(mrworker_raw pthread -ldl -lzmq)
-
 add_executable(mrcoordinator_raw ${MAIN_COORDINATOR_RAW})
 target_link_libraries(mrcoordinator_raw pthread -lzmq)
 
 add_executable(mrworker_pure_raw ${MAIN_WORKER_PURE_RAW})
 target_link_libraries(mrworker_pure_raw pthread -ldl -lzmq)
-
 add_executable(mrcoordinator_pure_raw ${MAIN_COORDINATOR_PURE_RAW})
 target_link_libraries(mrcoordinator_pure_raw pthread -lzmq)
+
+
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
