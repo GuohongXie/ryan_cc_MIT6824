@@ -60,6 +60,7 @@ int main() {
   for (int i = 0; i < map_task_num_tmp; i++) {
     std::thread(&Worker::MapWorker, &worker, nullptr).detach();
   }
+  //TODO:这里为了在类外用类的成员mutex_和cond_，把他们设置成了public，破坏了数据封装的原则
   std::unique_lock<std::mutex> lock1(Worker::mutex_);
   Worker::cond_.wait(lock1);
   lock1.unlock();

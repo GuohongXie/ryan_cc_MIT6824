@@ -21,10 +21,7 @@ file(GLOB CC_COORDINATOR ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr/coordinat
 file(GLOB CC_WORKER ${PROJECT_SOURCE_DIR}/../../src/map_reduce/mr/worker.cc)
 file(GLOB MAIN_COORDINATOR ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrcoordinator.cc)
 file(GLOB MAIN_WORKER ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker.cc)
-file(GLOB MAIN_WORKER_RAW ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker_raw.cc)
-file(GLOB MAIN_COORDINATOR_RAW ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrcoordinator_raw.cc)
-file(GLOB MAIN_COORDINATOR_PURE_RAW ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrcoordinator_pure_raw.cc)
-file(GLOB MAIN_WORKER_PURE_RAW ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker_pure_raw.cc)
+file(GLOB MAIN_WORKER_OLD ${PROJECT_SOURCE_DIR}/../../src/map_reduce/main/mrworker_old.cc)
 
 # 设置编译选项
 set(CXX_FLAGS
@@ -43,15 +40,8 @@ target_link_libraries(mrcoordinator pthread -lzmq)
 add_executable(mrworker ${MAIN_WORKER})
 target_link_libraries(mrworker pthread -ldl -lzmq)
 
-add_executable(mrworker_raw ${MAIN_WORKER_RAW})
-target_link_libraries(mrworker_raw pthread -ldl -lzmq)
-add_executable(mrcoordinator_raw ${MAIN_COORDINATOR_RAW})
-target_link_libraries(mrcoordinator_raw pthread -lzmq)
-
-add_executable(mrworker_pure_raw ${MAIN_WORKER_PURE_RAW})
-target_link_libraries(mrworker_pure_raw pthread -ldl -lzmq)
-add_executable(mrcoordinator_pure_raw ${MAIN_COORDINATOR_PURE_RAW})
-target_link_libraries(mrcoordinator_pure_raw pthread -lzmq)
+add_executable(mrworker_old ${MAIN_WORKER_OLD})
+target_link_libraries(mrworker_old pthread -ldl -lzmq)
 
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

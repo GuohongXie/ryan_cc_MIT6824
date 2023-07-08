@@ -11,8 +11,8 @@ mv libmap_reduce.so ../main/libmap_reduce.so
 
 
 cd ../main/
-g++ -std=c++17 mrworker_pure_raw.cc -ldl -o worker -lzmq -pthread
-g++ -std=c++17 mrcoordinator_pure_raw.cc -lzmq -pthread -o master
+g++ -std=c++17 mrworker_old.cc -I../../buttonrpc -I../mr -lzmq -pthread -ldl -o mrworker_old
+g++ -std=c++17 mrcoordinator.cc ../mr/coordinator.cc -I../../buttonrpc -I../mr -lzmq -pthread -o mrcoordinator
 
 
 # Use the following command to run all the unit tests
