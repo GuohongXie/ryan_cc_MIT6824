@@ -72,7 +72,7 @@ public:
 	~buttonrpc();
 
 	// network
-	void as_client(const std::string& ip, int port);
+	void as_client(std::string ip, int port);
 	void as_server(int port);
 	void send(zmq::message_t& data);
 	void recv(zmq::message_t& data);
@@ -224,7 +224,7 @@ buttonrpc::~buttonrpc(){
 }
 
 // network
-void buttonrpc::as_client( const std::string& ip, int port )
+void buttonrpc::as_client( std::string ip, int port )
 {
 	m_role = RPC_CLIENT;
 	m_socket = new zmq::socket_t(m_context, ZMQ_REQ);
@@ -283,7 +283,7 @@ void buttonrpc::run()
 	}
 }
 
-// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+// ´¦Àíº¯ÊýÏà¹Ø
 
 Serializer* buttonrpc::call_(std::string name, const char* data, int len)
 {
