@@ -105,7 +105,7 @@ void* Coordinator::WaitReduceTask(void* arg) {
       printf(" before insert %s\n", a);
     }
     reduce->reduce_index_.emplace_back(reduce->running_reduce_work_[reduce->curr_reduce_index_]);
-    printf(" reduce%d is timeout\n", reduce->running_reduce_work_[reduce->curr_reduce_index_]);
+    printf("%d reduce is timeout\n", reduce->running_reduce_work_[reduce->curr_reduce_index_]);
     (reduce->curr_reduce_index_)++;
     for (auto a : reduce->input_file_name_list_) {
       printf(" after insert %s\n", a);

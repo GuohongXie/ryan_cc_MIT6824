@@ -2,17 +2,17 @@
 #define RYAN_DS_MAP_REDUCE_MR_WORKER_H_
 //TODO:差点忘了头文件保护，写任何头文件的第一步就是写头文件保护
 
-#include <dirent.h>
-#include <dlfcn.h>
-#include <fcntl.h>
-#include <pthread.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <dirent.h>  //struct dirent* entry;
+#include <dlfcn.h>   //dlopen, dlclose
+#include <fcntl.h>   // ::open()
+//#include <pthread.h>
+//#include <signal.h>
+//#include <stdlib.h>
+//#include <string.h>
+//#include <sys/stat.h>
+//#include <sys/time.h>
+//#include <sys/types.h>
+#include <unistd.h>  //write, access, read, sleep
 
 #include <iostream>
 #include <string>
