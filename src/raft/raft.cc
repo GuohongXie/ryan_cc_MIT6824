@@ -1,16 +1,20 @@
 #include <bits/stdc++.h>
+#include <fcntl.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include "locker.h"
+
+#include <chrono>
+#include <condition_variable>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "buttonrpc.hpp"
-#include <iostream>
-#include <vector>
-#include <string>
-#include <chrono>
+#include "locker.h"
+
 using namespace std;
 
 #define COMMOM_PORT 1234
@@ -18,849 +22,923 @@ using namespace std;
 
 //需要结合LAB3实现应用层dataBase和Raft交互用的，通过getCmd()转化为applyMsg的command
 //实际上这只是LAB2的raft.hpp，在LAB3中改了很多，LAB4又改了不少，所以每个LAB都引了单独的raft.hpp
-class Operation{
-public:
-    std::string GetCmd();
-    std::string op;
-    std::string key;
-    std::string value;
-    int clientId;
-    int requestId;
+class Operation {
+ public:
+  std::string GetCmd();
+  std::string op;
+  std::string key;
+  std::string value;
+  int clientId;
+  int requestId;
 };
 
-std::string Operation::GetCmd(){
-    std::string cmd = op + " " + key + " " + value;
-    return cmd;
+std::string Operation::GetCmd() {
+  std::string cmd = op + " " + key + " " + value;
+  return cmd;
 }
 
-//通过传入raft.start()得到的返回值，封装成类
-class StartRet{
-public:
-    StartRet():cmd_index(-1), curr_term(-1), is_leader(false){}
-    int cmd_index;
-    int curr_term;
-    bool is_leader;
+//通过传入raft.Start()得到的返回值，封装成类
+class StartRet {
+ public:
+  StartRet() : cmd_index(-1), curr_term_(-1), is_leader(false) {}
+  int cmd_index;
+  int curr_term_;
+  bool is_leader;
 };
 
 //同应用层交互的需要提交到应用层并apply的封装成applyMsg的日志信息
 class ApplyMsg {
-    bool is_command_valid;
-	std::string command;
-    int command_index;
+  bool is_command_valid;
+  std::string command;
+  int command_index;
 };
 
 //一个存放当前raft的ID及自己两个RPC端口号的class(为了减轻负担，一个选举，一个日志同步，分开来)
-struct PeersInfo{
-    std::pair<int, int> port;
-    int peer_id;
+struct PeersInfo {
+  std::pair<int, int> port;
+  int peer_id_;
 };
 
 //日志
-class LogEntry{
-public:
-    LogEntry(std::string cmd = "", int term_tmp = -1):command(cmd),term(term_tmp){}
-    std::string command;
-    int term;
+class LogEntry {
+ public:
+  LogEntry(std::string cmd = "", int term_tmp = -1)
+      : command(cmd), term(term_tmp) {}
+  std::string command;
+  int term;
 };
 
 //持久化类，LAB2中需要持久化的内容就这3个，后续会修改
-struct Persister{
-    std::vector<LogEntry> logs;
-    int curr_term;
-    int voted_for;
+struct Persister {
+  std::vector<LogEntry> logs;
+  int curr_term_;
+  int voted_for_;
 };
 
-class AppendEntriesArgs{
-public:
-    // AppendEntriesArgs():m_term(-1), m_leaderId(-1), m_prevLogIndex(-1), m_prevLogTerm(-1){
-    //     //m_leaderCommit = 0;
-    //     m_sendLogs.clear();
-    // }
-    int m_term;
-    int m_leaderId;
-    int m_prevLogIndex;
-    int m_prevLogTerm;
-    int m_leaderCommit;
-    std::string m_sendLogs;
-    friend Serializer& operator >> (Serializer& in, AppendEntriesArgs& d) {
-		in >> d.m_term >> d.m_leaderId >> d.m_prevLogIndex >> d.m_prevLogTerm >> d.m_leaderCommit >> d.m_sendLogs;
-		return in;
-	}
-	friend Serializer& operator << (Serializer& out, AppendEntriesArgs d) {
-		out << d.m_term << d.m_leaderId << d.m_prevLogIndex << d.m_prevLogTerm << d.m_leaderCommit << d.m_sendLogs;
-		return out;
-	}
+class AppendEntriesArgs {
+ public:
+  // AppendEntriesArgs():term(-1), leader_id_(-1), prev_log_index(-1),
+  // prev_log_term(-1){
+  //     //leader_commit = 0;
+  //     send_logs.clear();
+  // }
+  int term;
+  int leader_id_;
+  int prev_log_index;
+  int prev_log_term;
+  int leader_commit;
+  std::string send_logs;
+  friend Serializer& operator>>(Serializer& in, AppendEntriesArgs& d) {
+    in >> d.term >> d.leader_id_ >> d.prev_log_index >> d.prev_log_term >>
+        d.leader_commit >> d.send_logs;
+    return in;
+  }
+  friend Serializer& operator<<(Serializer& out, AppendEntriesArgs d) {
+    out << d.term << d.leader_id_ << d.prev_log_index << d.prev_log_term
+        << d.leader_commit << d.send_logs;
+    return out;
+  }
 };
 
-struct AppendEntriesReply{
-    int m_term;
-    bool m_success;
-    int m_conflict_term;        //用于冲突时日志快速匹配
-    int m_conflict_index;       //用于冲突时日志快速匹配
+struct AppendEntriesReply {
+  int term;
+  bool is_successful;
+  int conflict_term;   //用于冲突时日志快速匹配
+  int conflict_index;  //用于冲突时日志快速匹配
 };
 
-struct RequestVoteArgs{
-    int term;
-    int candidateId;
-    int lastLogTerm;
-    int lastLogIndex;
+struct RequestVoteArgs {
+  int term;
+  int candidate_id;
+  int last_log_term;
+  int last_log_index;
 };
 
-struct RequestVoteReply{
-    int term;
-    bool VoteGranted;
+struct RequestVoteReply {
+  int term;
+  bool vote_granted;
 };
 
-class Raft{
-public:
-    static void* listenForVote(void* arg);          //用于监听voteRPC的server线程
-    static void* listenForAppend(void* arg);        //用于监听appendRPC的server线程
-    static void* processEntriesLoop(void* arg);     //持续处理日志同步的守护线程
-    static void* electionLoop(void* arg);           //持续处理选举的守护线程
-    static void* callRequestVote(void* arg);        //发voteRPC的线程
-    static void* sendAppendEntries(void* arg);      //发appendRPC的线程
-    static void* applyLogLoop(void* arg);           //持续向上层应用日志的守护线程
-    // static void* apply(void* arg);
-    // static void* save(void* arg);
-    enum RAFT_STATE {LEADER = 0, CANDIDATE, FOLLOWER};          //用枚举定义的raft三种状态
-    void Make(std::vector<PeersInfo> peers, int id);                 //raft初始化
-    int getMyduration(timeval last);                            //传入某个特定计算到当下的持续时间
-    void setBroadcastTime();                                    //重新设定BroadcastTime，成为leader发心跳的时候需要重置
-    std::pair<int, bool> getState();                                 //在LAB3中会用到，提前留出来的接口判断是否leader
-    RequestVoteReply requestVote(RequestVoteArgs args);         //vote的RPChandler
-    AppendEntriesReply appendEntries(AppendEntriesArgs args);   //append的RPChandler
-    bool checkLogUptodate(int term, int index);                 //判断是否最新日志(两个准则)，vote时会用到
-    void push_backLog(LogEntry log);                            //插入新日志
-    std::vector<LogEntry> getCmdAndTerm(std::string text);                //用的RPC不支持传容器，所以封装成string，这个是解封装恢复函数
-    StartRet start(Operation op);                               //向raft传日志的函数，只有leader响应并立即返回，应用层用到
-    void printLogs();
-    
-    void serialize();                               //序列化
-    bool deserialize();                             //反序列化
-    void saveRaftState();                           //持久化
-    void readRaftState();                           //读取持久化状态
-    bool isKilled();  //->check is killed?
-    void kill();                                    //设定raft状态为dead，LAB3B快照测试时会用到
+class Raft {
+ public:
+  static void* ListenForVote(void* arg);    //用于监听voteRPC的server线程
+  static void* ListenForAppend(void* arg);  //用于监听appendRPC的server线程
+  static void* ProcessEntriesLoop(void* arg);  //持续处理日志同步的守护线程
+  static void* ElectionLoop(void* arg);     //持续处理选举的守护线程
+  static void* CallRequestVote(void* arg);  //发voteRPC的线程
+  static void* SendAppendEntries(void* arg);  //发appendRPC的线程
+  static void* ApplyLogLoop(void* arg);  //持续向上层应用日志的守护线程
+  // static void* apply(void* arg);
+  // static void* save(void* arg);
+  enum RAFT_STATE {
+    LEADER = 0,
+    CANDIDATE,
+    FOLLOWER
+  };  //用枚举定义的raft三种状态
+  void Make(std::vector<PeersInfo> peers, int id);  // raft初始化
+  int GetMyduration(const timeval& last);  //传入某个特定计算到当下的持续时间
+  void
+  SetBroadcastTime();  //重新设定BroadcastTime，成为leader发心跳的时候需要重置
+  std::pair<int, bool>
+  GetState();  //在LAB3中会用到，提前留出来的接口判断是否leader
+  RequestVoteReply RequestVote(RequestVoteArgs args);  // vote的RPChandler
+  AppendEntriesReply AppendEntries(
+      AppendEntriesArgs args);  // append的RPChandler
+  bool CheckLogUptodate(int term,
+                        int index);  //判断是否最新日志(两个准则)，vote时会用到
+  void PushBackLog(LogEntry log);  //插入新日志
+  std::vector<LogEntry> GetCmdAndTerm(
+      std::string
+          text);  //用的RPC不支持传容器，所以封装成string，这个是解封装恢复函数
+  StartRet Start(
+      Operation op);  //向raft传日志的函数，只有leader响应并立即返回，应用层用到
+  void PrintLogs();
 
-private:
-    locker m_lock;                  //成员变量不一一注释了，基本在论文里都有，函数实现也不注释了，看过论文看过我写的函数说明
-    cond m_cond;                    //自然就能理解了，不然要写太多了，这样整洁一点，注释了太乱了，论文才是最关键的
-    std::vector<PeersInfo> m_peers;
-    Persister persister;
-    int peer_id;
-    int dead;
+  void Serialize();      //序列化
+  bool Deserialize();    //反序列化
+  void SaveRaftState();  //持久化
+  void ReadRaftState();  //读取持久化状态
+  bool IsKilled();       //->check is killed?
+  void Kill();  //设定raft状态为dead，LAB3B快照测试时会用到
 
-    //需要持久化的data
-    int curr_term;
-    int m_votedFor;
-    std::vector<LogEntry> m_logs;
+ private:
+  locker
+      m_lock;  //成员变量不一一注释了，基本在论文里都有，函数实现也不注释了，看过论文看过我写的函数说明
+               //自然就能理解了，不然要写太多了，这样整洁一点，注释了太乱了，论文才是最关键的
+  std::mutex mutex_;
+  std::condition_variable cond_;
+  std::vector<PeersInfo> peers_;
+  Persister persister_;
+  int peer_id_;
+  int is_dead_;
 
-    std::vector<int> m_nextIndex;
-    std::vector<int> m_matchIndex;
-    int m_lastApplied;
-    int m_commitIndex;
+  //需要持久化的data
+  int curr_term_;
+  int voted_for_;
+  std::vector<LogEntry> logs_;
 
-    // unordered_map<int, int> m_firstIndexOfEachTerm;
-    // std::vector<int> m_nextIndex;
-    // std::vector<int> m_matchIndex;
+  std::vector<int> next_index_;
+  std::vector<int> match_index_;
+  int last_applied_;
+  int commit_index_;
 
-    int recvVotes;
-    int finishedVote;
-    int cur_peerId;
+  // unordered_map<int, int> m_firstIndexOfEachTerm;
+  // std::vector<int> next_index_;
+  // std::vector<int> match_index_;
 
-    RAFT_STATE m_state;
-    int m_leaderId;
-    struct timeval m_lastWakeTime;
-    struct timeval m_lastBroadcastTime;
+  int recv_votes_;
+  int finished_vote_;
+  int curr_peer_id_;
+
+  RAFT_STATE state_;
+  int leader_id_;
+  struct timeval last_wake_time_;
+  struct timeval last_broadcast_time_;
 };
 
-void Raft::Make(std::vector<PeersInfo> peers, int id){
-    m_peers = peers;
-    //this->persister = persister;
-    peer_id = id;
-    dead = 0;
+void Raft::Make(std::vector<PeersInfo> peers, int id) {
+  peers_ = peers;
+  // this->persister_ = persister_;
+  peer_id_ = id;
+  is_dead_ = 0;
 
-    m_state = FOLLOWER;
-    curr_term = 0;
-    m_leaderId = -1;
-    m_votedFor = -1;
-    gettimeofday(&m_lastWakeTime, NULL);
-    // readPersist(persister.ReadRaftState());
+  state_ = FOLLOWER;
+  curr_term_ = 0;
+  leader_id_ = -1;
+  voted_for_ = -1;
+  // last_wake_time_ = std::chrono::system_clock::now();
+  ::gettimeofday(&last_wake_time_, nullptr);
+  // readPersist(persister_.ReadRaftState());
 
-    // for(int i = 0; i < id + 1; i++){
-    //     LogEntry log;
-    //     log.command = to_string(i);
-    //     log.m_term = i;
-    //     m_logs.push_back(log);
-    // }
+  // for(int i = 0; i < id + 1; i++){
+  //     LogEntry log;
+  //     log.command = to_string(i);
+  //     log.term = i;
+  //     logs_.push_back(log);
+  // }
 
-    recvVotes = 0;
-    finishedVote = 0;
-    cur_peerId = 0;
+  recv_votes_ = 0;
+  finished_vote_ = 0;
+  curr_peer_id_ = 0;
 
-    m_lastApplied = 0;
-    m_commitIndex = 0;
-    m_nextIndex.resize(peers.size(), 1);
-    m_matchIndex.resize(peers.size(), 0);
+  last_applied_ = 0;
+  commit_index_ = 0;
+  next_index_.resize(peers.size(), 1);
+  match_index_.resize(peers.size(), 0);
 
-    readRaftState();
+  ReadRaftState();
 
-    pthread_t listen_tid1;
-    pthread_t listen_tid2;
-    pthread_t listen_tid3;
-    pthread_create(&listen_tid1, NULL, listenForVote, this);
-    pthread_detach(listen_tid1);
-    pthread_create(&listen_tid2, NULL, listenForAppend, this);
-    pthread_detach(listen_tid2);
-    pthread_create(&listen_tid3, NULL, applyLogLoop, this);
-    pthread_detach(listen_tid3);
+  // Using std::thread instead of pthread
+  std::thread listen_thread1(&Raft::ListenForVote, this);
+  listen_thread1.detach();
+  std::thread listen_thread2(&Raft::ListenForAppend, this);
+  listen_thread2.detach();
+  std::thread listen_thread3(&Raft::ApplyLogLoop, this);
+  listen_thread3.detach();
 }
 
-void* Raft::applyLogLoop(void* arg){
+/*
+void* Raft::ApplyLogLoop(void* arg){
     Raft* raft = (Raft*)arg;
-    while(!raft->dead){
-        usleep(10000);
+    while(!raft->is_dead_){
+        ::usleep(10000);
         raft->m_lock.lock();
-        for(int i = raft->m_lastApplied; i < raft->m_commitIndex; i++){
-            /**
-             * @brief 封装好信息发回给客户端, LAB3中会用
-             *     ApplyMsg msg;
-             * 
-             */
+        for(int i = raft->last_applied_; i < raft->commit_index_; i++){
+            //  @brief 封装好信息发回给客户端, LAB3中会用
+            //  ApplyMsg msg;
         }
-        raft->m_lastApplied = raft->m_commitIndex;
+        raft->last_applied_ = raft->commit_index_;
         raft->m_lock.unlock();
     }
 }
+*/
+void* Raft::ApplyLogLoop(void* arg) {
+  // Raft* raft = (Raft*)arg;
+  Raft* raft = static_cast<Raft*>(arg);
+  while (!raft->is_dead_) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::lock_guard<std::mutex> lock(raft->mutex_);
+    for (int i = raft->last_applied_; i < raft->commit_index_; i++) {
+      //  @brief 封装好信息发回给客户端, LAB3中会用
+      //  ApplyMsg msg;
+    }
+    raft->last_applied_ = raft->commit_index_;
+  }
+}
 
-int Raft::getMyduration(timeval last){
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    // printf("--------------------------------\n");
-    // printf("now's sec : %ld, now's usec : %ld\n", now.tv_sec, now.tv_usec);
-    // printf("last's sec : %ld, last's usec : %ld\n", last.tv_sec, last.tv_usec);
-    // printf("%d\n", ((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec - last.tv_usec)));
-    // printf("--------------------------------\n");
-    return ((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec - last.tv_usec));
-}   
+int Raft::GetMyduration(const timeval& last) {
+  struct timeval now;
+  ::gettimeofday(&now, nullptr);
+  // printf("--------------------------------\n");
+  // printf("now's sec : %ld, now's usec : %ld\n", now.tv_sec, now.tv_usec);
+  // printf("last's sec : %ld, last's usec : %ld\n", last.tv_sec, last.tv_usec);
+  // printf("%d\n", ((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec -
+  // last.tv_usec))); printf("--------------------------------\n");
+  return ((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec - last.tv_usec));
+}
 
-//稍微解释下-200000us是因为让记录的m_lastBroadcastTime变早，这样在appendLoop中getMyduration(m_lastBroadcastTime)直接达到要求
+//稍微解释下-200000us是因为让记录的m_lastBroadcastTime变早，这样在appendLoop中getMyduration(last_broadcast_time_)直接达到要求
 //因为心跳周期是100000us
-void Raft::setBroadcastTime(){
-    gettimeofday(&m_lastBroadcastTime, NULL);
-    printf("before : %ld, %ld\n", m_lastBroadcastTime.tv_sec, m_lastBroadcastTime.tv_usec);
-    if(m_lastBroadcastTime.tv_usec >= 200000){
-        m_lastBroadcastTime.tv_usec -= 200000;
-    }else{
-        m_lastBroadcastTime.tv_sec -= 1;
-        m_lastBroadcastTime.tv_usec += (1000000 - 200000);
-    }
+void Raft::SetBroadcastTime() {
+  ::gettimeofday(&last_broadcast_time_, nullptr);
+  printf("before : %ld, %ld\n", last_broadcast_time_.tv_sec,
+         last_broadcast_time_.tv_usec);
+  if (last_broadcast_time_.tv_usec >= 200000) {
+    last_broadcast_time_.tv_usec -= 200000;
+  } else {
+    last_broadcast_time_.tv_sec -= 1;
+    last_broadcast_time_.tv_usec += (1000000 - 200000);
+  }
 }
 
-void* Raft::listenForVote(void* arg){
-    Raft* raft = (Raft*)arg;
-    buttonrpc server;
-    server.as_server(raft->m_peers[raft->peer_id].port.first);
-    server.bind("requestVote", &Raft::requestVote, raft);
+void* Raft::ListenForVote(void* arg) {
+  // Raft* raft = (Raft*)arg;
+  Raft* raft = static_cast<Raft*>(arg);
+  buttonrpc server;
+  server.as_server(raft->peers_[raft->peer_id_].port.first);
+  server.bind("RequestVote", &Raft::RequestVote, raft);
 
-    pthread_t wait_tid;
-    pthread_create(&wait_tid, NULL, electionLoop, raft);
-    pthread_detach(wait_tid);
+  // pthread_t wait_tid;
+  // pthread_create(&wait_tid, nullptr, ElectionLoop, raft);
+  // pthread_detach(wait_tid);
+  std::thread election_thread(&Raft::ElectionLoop, raft);
+  election_thread.detach();
 
-    server.run();
-    printf("exit!\n");
+  server.run();
+  printf("exit!\n");
 }
 
-void* Raft::listenForAppend(void* arg){
-    Raft* raft = (Raft*)arg;
-    buttonrpc server;
-    server.as_server(raft->m_peers[raft->peer_id].port.second);
-    server.bind("appendEntries", &Raft::appendEntries, raft);
+void* Raft::ListenForAppend(void* arg) {
+  // Raft* raft = (Raft*)arg;
+  Raft* raft = static_cast<Raft*>(arg);
+  buttonrpc server;
+  server.as_server(raft->peers_[raft->peer_id_].port.second);
+  server.bind("AppendEntries", &Raft::AppendEntries, raft);
 
-    pthread_t heart_tid;
-    pthread_create(&heart_tid, NULL, processEntriesLoop, raft);
-    pthread_detach(heart_tid);
+  // pthread_t heart_tid;
+  // pthread_create(&heart_tid, nullptr, ProcessEntriesLoop, raft);
+  // pthread_detach(heart_tid);
+  std::thread processEntriesThread(&Raft::ProcessEntriesLoop, raft);
+  processEntriesThread.detach();
 
-    server.run();
-    printf("exit!\n");
+  server.run();
+  printf("exit!\n");
 }
 
-void* Raft::electionLoop(void* arg){
-    Raft* raft = (Raft*)arg;
-    bool resetFlag = false;
-    while(!raft->dead){
-        
-        int timeOut = rand()%200000 + 200000;
-        while(1){
-            usleep(1000);
-            raft->m_lock.lock();
+void* Raft::ElectionLoop(void* arg) {
+  // Raft* raft = (Raft*)arg;
+  Raft* raft = static_cast<Raft*>(arg);
+  bool resetFlag = false;
+  while (!raft->is_dead_) {
+    int time_out = ::rand() % 200000 + 200000;
+    while (true) {
+      //::usleep(1000);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::unique_lock<std::mutex> lock(raft->mutex_);
 
-            int during_time = raft->getMyduration(raft->m_lastWakeTime);
-            if(raft->m_state == FOLLOWER && during_time > timeOut){
-                raft->m_state = CANDIDATE;
-            }
+      int during_time = raft->GetMyduration(raft->last_wake_time_);
+      if (raft->state_ == FOLLOWER && during_time > time_out) {
+        raft->state_ = CANDIDATE;
+      }
 
-            if(raft->m_state == CANDIDATE && during_time > timeOut){
-                printf(" %d attempt election at term %d, timeOut is %d\n", raft->peer_id, raft->curr_term, timeOut);
-                gettimeofday(&raft->m_lastWakeTime, NULL);
-                resetFlag = true;
-                raft->curr_term++;
-                raft->m_votedFor = raft->peer_id;
-                raft->saveRaftState();
+      if (raft->state_ == CANDIDATE && during_time > time_out) {
+        printf(" %d attempt election at term %d, time_out is %d\n",
+               raft->peer_id_, raft->curr_term_, time_out);
+        ::gettimeofday(&raft->last_wake_time_, nullptr);
+        resetFlag = true;
+        raft->curr_term_++;
+        raft->voted_for_ = raft->peer_id_;
+        raft->SaveRaftState();
 
-                raft->recvVotes = 1;
-                raft->finishedVote = 1;
-                raft->cur_peerId = 0;
-                
-                pthread_t tid[raft->m_peers.size() - 1];
-                int i = 0;
-                for(auto server : raft->m_peers){
-                    if(server.peer_id == raft->peer_id) continue;
-                    pthread_create(tid + i, NULL, callRequestVote, raft);
-                    pthread_detach(tid[i]);
-                    i++;
-                }
+        raft->recv_votes_ = 1;
+        raft->finished_vote_ = 1;
+        raft->curr_peer_id_ = 0;
 
-                while(raft->recvVotes <= raft->m_peers.size() / 2 && raft->finishedVote != raft->m_peers.size()){
-                    raft->m_cond.wait(raft->m_lock.getLock());
-                }
-                if(raft->m_state != CANDIDATE){
-                    raft->m_lock.unlock();
-                    continue;
-                }
-                if(raft->recvVotes > raft->m_peers.size() / 2){
-                    raft->m_state = LEADER;
-
-                    for(int i = 0; i < raft->m_peers.size(); i++){
-                        raft->m_nextIndex[i] = raft->m_logs.size() + 1;
-                        raft->m_matchIndex[i] = 0;
-                    }
-
-                    printf(" %d become new leader at term %d\n", raft->peer_id, raft->curr_term);
-                    raft->setBroadcastTime();
-                }
-            }
-            raft->m_lock.unlock();
-            if(resetFlag){
-                resetFlag = false;
-                break;
-            }
+        std::vector<std::thread> threads;
+        for (auto& server : raft->peers_) {
+          if (server.peer_id_ == raft->peer_id_) continue;
+          std::thread(CallRequestVote, raft).detach();
         }
-        
+
+        // for(auto& thread : threads) {
+        //    if(thread.joinable()) {
+        //        thread.detach();
+        //    }
+        //}
+
+        // pthread_t tid[raft->peers_.size() - 1];
+        // int i = 0;
+        // for(auto server : raft->peers_){
+        //    if(server.peer_id_ == raft->peer_id_) continue;
+        //    pthread_create(tid + i, nullptr, CallRequestVote, raft);
+        //    pthread_detach(tid[i]);
+        //    i++;
+        //}
+
+        while (raft->recv_votes_ <= raft->peers_.size() / 2 &&
+               raft->finished_vote_ != raft->peers_.size()) {
+          raft->cond_.wait(lock);
+        }
+        if (raft->state_ != CANDIDATE) {
+          lock.unlock();
+          continue;
+        }
+        if (raft->recv_votes_ > raft->peers_.size() / 2) {
+          raft->state_ = LEADER;
+
+          for (int i = 0; i < raft->peers_.size(); i++) {
+            raft->next_index_[i] = raft->logs_.size() + 1;
+            raft->match_index_[i] = 0;
+          }
+
+          printf(" %d become new leader at term %d\n", raft->peer_id_,
+                 raft->curr_term_);
+          raft->SetBroadcastTime();
+        }
+      }
+      lock.unlock();
+      if (resetFlag) {
+        resetFlag = false;
+        break;
+      }
     }
+  }
 }
 
-void* Raft::callRequestVote(void* arg){
-    Raft* raft = (Raft*) arg;
-    buttonrpc client;
-    raft->m_lock.lock();
-    RequestVoteArgs args;
-    args.candidateId = raft->peer_id;
-    args.term = raft->curr_term;
-    args.lastLogIndex = raft->m_logs.size();
-    args.lastLogTerm = raft->m_logs.size() != 0 ? raft->m_logs.back().m_term : 0;
+void* Raft::CallRequestVote(void* arg) {
+  Raft* raft = (Raft*)arg;
+  buttonrpc client;
+  raft->m_lock.lock();
+  RequestVoteArgs args;
+  args.candidate_id = raft->peer_id_;
+  args.term = raft->curr_term_;
+  args.last_log_index = raft->logs_.size();
+  args.last_log_term = raft->logs_.size() != 0 ? raft->logs_.back().term : 0;
 
-    if(raft->cur_peerId == raft->peer_id){
-        raft->cur_peerId++;     
-    }
-    int clientPeerId = raft->cur_peerId;
-    client.as_client("127.0.0.1", raft->m_peers[raft->cur_peerId++].port.first);
+  if (raft->curr_peer_id_ == raft->peer_id_) {
+    raft->curr_peer_id_++;
+  }
+  int clientPeerId = raft->curr_peer_id_;
+  client.as_client("127.0.0.1", raft->peers_[raft->curr_peer_id_++].port.first);
 
-    if(raft->cur_peerId == raft->m_peers.size() || 
-            (raft->cur_peerId == raft->m_peers.size() - 1 && raft->peer_id == raft->cur_peerId)){
-        raft->cur_peerId = 0;
-    }
+  if (raft->curr_peer_id_ == raft->peers_.size() ||
+      (raft->curr_peer_id_ == raft->peers_.size() - 1 &&
+       raft->peer_id_ == raft->curr_peer_id_)) {
+    raft->curr_peer_id_ = 0;
+  }
+  raft->m_lock.unlock();
+
+  RequestVoteReply reply =
+      client.call<RequestVoteReply>("RequestVote", args).val();
+
+  raft->m_lock.lock();
+  raft->finished_vote_++;
+  raft->cond_.notify_one();
+  if (reply.term > raft->curr_term_) {
+    raft->state_ = FOLLOWER;
+    raft->curr_term_ = reply.term;
+    raft->voted_for_ = -1;
+    raft->ReadRaftState();
     raft->m_lock.unlock();
-
-    RequestVoteReply reply = client.call<RequestVoteReply>("requestVote", args).val();
-
-    raft->m_lock.lock();
-    raft->finishedVote++;
-    raft->m_cond.signal();
-    if(reply.term > raft->curr_term){
-        raft->m_state = FOLLOWER;
-        raft->curr_term = reply.term;
-        raft->m_votedFor = -1;
-        raft->readRaftState();
-        raft->m_lock.unlock();
-        return NULL;
-    }
-    if(reply.VoteGranted){
-        raft->recvVotes++;
-    }
-    raft->m_lock.unlock();
+    return nullptr;
+  }
+  if (reply.vote_granted) {
+    raft->recv_votes_++;
+  }
+  raft->m_lock.unlock();
 }
 
-bool Raft::checkLogUptodate(int term, int index){
-    m_lock.lock();
-    if(m_logs.size() == 0){
-        m_lock.unlock();
-        return true;
-    }
-    if(term > m_logs.back().m_term){
-        m_lock.unlock();
-        return true;
-    }
-    if(term == m_logs.back().m_term && index >= m_logs.size()){
-        m_lock.unlock();
-        return true;
-    }
+bool Raft::CheckLogUptodate(int term, int index) {
+  m_lock.lock();
+  if (logs_.size() == 0) {
     m_lock.unlock();
-    return false;
-}
-
-RequestVoteReply Raft::requestVote(RequestVoteArgs args){
-    RequestVoteReply reply;
-    reply.VoteGranted = false;
-    m_lock.lock();
-    reply.term = curr_term;
-
-    if(curr_term > args.term){
-        m_lock.unlock();
-        return reply;
-    }
-
-    if(curr_term < args.term){
-        m_state = FOLLOWER;
-        curr_term = args.term;
-        m_votedFor = -1;
-    }
-
-    if(m_votedFor == -1 || m_votedFor == args.candidateId){
-        m_lock.unlock();
-        bool ret = checkLogUptodate(args.lastLogTerm, args.lastLogIndex);
-        if(!ret) return reply;
-
-        m_lock.lock();
-        m_votedFor = args.candidateId;
-        reply.VoteGranted = true;
-        printf("[%d] vote to [%d] at %d, duration is %d\n", peer_id, args.candidateId, curr_term, getMyduration(m_lastWakeTime));
-        gettimeofday(&m_lastWakeTime, NULL);
-    }
-    saveRaftState();
-    m_lock.unlock();
-    return reply;
-}
-
-void* Raft::processEntriesLoop(void* arg){
-    Raft* raft = (Raft*)arg;
-    while(!raft->dead){
-        usleep(1000);
-        raft->m_lock.lock();
-        if(raft->m_state != LEADER){
-            raft->m_lock.unlock();
-            continue;
-        }
-        
-        // printf("sec : %ld, usec : %ld\n", raft->m_lastBroadcastTime.tv_sec, raft->m_lastBroadcastTime.tv_usec);
-        int during_time = raft->getMyduration(raft->m_lastBroadcastTime);
-        // printf("time is %d\n", during_time);
-        if(during_time < HEART_BEART_PERIOD){
-            raft->m_lock.unlock();
-            continue;
-        }
-
-        gettimeofday(&raft->m_lastBroadcastTime, NULL);
-        // printf("%d send AppendRetries at %d\n", raft->peer_id, raft->curr_term);
-        raft->m_lock.unlock();
-        pthread_t tid[raft->m_peers.size() - 1];
-        int i = 0;
-        for(auto server : raft->m_peers){
-            if(server.peer_id == raft->peer_id) continue;
-            pthread_create(tid + i, NULL, sendAppendEntries, raft);
-            pthread_detach(tid[i]);
-            i++;
-        }
-    }
-}
-
-vstd::ector<LogEntry> Raft::getCmdAndTerm(std::string text){
-    std::vector<LogEntry> logs;
-    int n = text.size();
-    std::vector<std::string> str;
-    std::string tmp = "";
-    for(int i = 0; i < n; i++){
-        if(text[i] != ';'){
-            tmp += text[i];
-        }else{
-            if(tmp.size() != 0) str.push_back(tmp);
-            tmp = "";
-        }
-    }
-    for(int i = 0; i < str.size(); i++){
-        tmp = "";
-        int j = 0;
-        for(; j < str[i].size(); j++){
-            if(str[i][j] != ','){
-                tmp += str[i][j];
-            }else break;
-        }
-        std::string number(str[i].begin() + j + 1, str[i].end());
-        int num = atoi(number.c_str());
-        logs.push_back(LogEntry(tmp, num));
-    }
-    return logs;
-}
-
-void Raft::push_backLog(LogEntry log){
-    m_logs.push_back(log);
-}
-
-void* Raft::sendAppendEntries(void* arg){
-    Raft* raft = (Raft*)arg;
-    buttonrpc client;
-    AppendEntriesArgs args;
-    raft->m_lock.lock();
-
-    if(raft->cur_peerId == raft->peer_id){
-        raft->cur_peerId++;     
-    }
-    int clientPeerId = raft->cur_peerId;
-    client.as_client("127.0.0.1", raft->m_peers[raft->cur_peerId++].port.second);
-
-    args.m_term = raft->curr_term;
-    args.m_leaderId = raft->peer_id;
-    args.m_prevLogIndex = raft->m_nextIndex[clientPeerId] - 1;
-    args.m_leaderCommit = raft->m_commitIndex;
-
-    for(int i = args.m_prevLogIndex; i < raft->m_logs.size(); i++){
-        args.m_sendLogs += (raft->m_logs[i].command + "," + to_string(raft->m_logs[i].m_term) + ";");
-    }
-    if(args.m_prevLogIndex == 0){
-        args.m_prevLogTerm = 0;
-        if(raft->m_logs.size() != 0){
-            args.m_prevLogTerm = raft->m_logs[0].m_term;
-        }
-    }
-    else args.m_prevLogTerm = raft->m_logs[args.m_prevLogIndex - 1].m_term;
-
-    printf("[%d] -> [%d]'s prevLogIndex : %d, prevLogTerm : %d\n", raft->peer_id, clientPeerId, args.m_prevLogIndex, args.m_prevLogTerm);
-    
-    if(raft->cur_peerId == raft->m_peers.size() || 
-            (raft->cur_peerId == raft->m_peers.size() - 1 && raft->peer_id == raft->cur_peerId)){
-        raft->cur_peerId = 0;
-    }
-    raft->m_lock.unlock();
-    AppendEntriesReply reply = client.call<AppendEntriesReply>("appendEntries", args).val();
-
-    raft->m_lock.lock();
-    if(reply.m_term > raft->curr_term){
-        raft->m_state = FOLLOWER;
-        raft->curr_term = reply.m_term;
-        raft->m_votedFor = -1;
-        raft->saveRaftState();
-        raft->m_lock.unlock();
-        return NULL;                        //FOLLOWER没必要维护nextIndex,成为leader会更新
-    }
-
-    if(reply.m_success){
-        raft->m_nextIndex[clientPeerId] += raft->getCmdAndTerm(args.m_sendLogs).size();
-        raft->m_matchIndex[clientPeerId] = raft->m_nextIndex[clientPeerId] - 1;
-    
-        std::vector<int> tmpIndex = raft->m_matchIndex;
-        sort(tmpIndex.begin(), tmpIndex.end());
-        int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
-        if(realMajorityMatchIndex > raft->m_commitIndex && raft->m_logs[realMajorityMatchIndex - 1].m_term == raft->curr_term){
-            raft->m_commitIndex = realMajorityMatchIndex;
-        }
-    }
-
-    if(!reply.m_success){
-        // if(!raft->m_firstIndexOfEachTerm.count(reply.m_conflict_term)){
-        //     raft->m_nextIndex[clientPeerId]--;
-        // }else{
-        //     raft->m_nextIndex[clientPeerId] = min(reply.m_conflict_index, raft->m_firstIndexOfEachTerm[reply.m_conflict_term]);
-        // }   
-
-        if(reply.m_conflict_term != -1){
-            int leader_conflict_index = -1;
-            for(int index = args.m_prevLogIndex; index >= 1; index--){
-                if(raft->m_logs[index - 1].m_term == reply.m_conflict_term){
-                    leader_conflict_index = index;
-                    break;
-                }
-            }
-            if(leader_conflict_index != -1){
-                raft->m_nextIndex[clientPeerId] = leader_conflict_index + 1;
-            }else{
-                raft->m_nextIndex[clientPeerId] = reply.m_conflict_index;
-            }
-        }else{
-            raft->m_nextIndex[clientPeerId] = reply.m_conflict_index + 1;
-        }
-        
-    }
-    raft->saveRaftState();
-    raft->m_lock.unlock();
-
-}
-
-AppendEntriesReply Raft::appendEntries(AppendEntriesArgs args){
-    std::vector<LogEntry> recvLog = getCmdAndTerm(args.m_sendLogs);
-    AppendEntriesReply reply;
-    m_lock.lock();
-    reply.m_term = curr_term;
-    reply.m_success = false;
-    reply.m_conflict_index = -1;
-    reply.m_conflict_term = -1;
-
-    if(args.m_term < curr_term){
-        m_lock.unlock();
-        return reply;
-    }
-
-    if(args.m_term >= curr_term){
-        if(args.m_term > curr_term){
-            m_votedFor = -1;
-            saveRaftState();
-        }
-        curr_term = args.m_term;
-        m_state = FOLLOWER;
-
-    }
-    printf("[%d] recv append from [%d] at self term%d, send term %d, duration is %d\n",
-            peer_id, args.m_leaderId, curr_term, args.m_term, getMyduration(m_lastWakeTime));
-    gettimeofday(&m_lastWakeTime, NULL);
-    // persister()
-
-    int logSize = 0;
-    if(m_logs.size() == 0){
-        for(const auto& log : recvLog){
-            push_backLog(log);
-        }
-        saveRaftState();
-        logSize = m_logs.size();
-        if(m_commitIndex < args.m_leaderCommit){
-            m_commitIndex = min(args.m_leaderCommit, logSize);
-        }
-        // persister.persist_lock.lock();
-        // persister.curr_term = curr_term;
-        // persister.voted_for = m_votedFor;
-        // persister.logs = m_logs;
-        // persister.persist_lock.unlock();
-        m_lock.unlock();
-        reply.m_success = true;
-        // saveRaftState();
-        return reply;
-    }
-
-    if(m_logs.size() < args.m_prevLogIndex){
-        printf(" [%d]'s logs.size : %d < [%d]'s prevLogIdx : %d\n", peer_id, m_logs.size(), args.m_leaderId, args.m_prevLogIndex);
-        reply.m_conflict_index = m_logs.size();    //索引要加1
-        m_lock.unlock();
-        reply.m_success = false;
-        return reply;
-    }
-    if(args.m_prevLogIndex > 0 && m_logs[args.m_prevLogIndex - 1].m_term != args.m_prevLogTerm){
-        printf(" [%d]'s prevLogterm : %d != [%d]'s prevLogTerm : %d\n", peer_id, m_logs[args.m_prevLogIndex - 1].m_term, args.m_leaderId, args.m_prevLogTerm);
-
-        reply.m_conflict_term = m_logs[args.m_prevLogIndex - 1].m_term;
-        for(int index = 1; index <= args.m_prevLogIndex; index++){
-            if(m_logs[index - 1].m_term == reply.m_conflict_term){
-                reply.m_conflict_index = index;                         //找到冲突term的第一个index,比索引要加1
-                break;
-            }
-        }
-        m_lock.unlock();
-        reply.m_success = false;
-        return reply;
-    }
-
-    logSize = m_logs.size();
-    for(int i = args.m_prevLogIndex; i < logSize; i++){
-        m_logs.pop_back();
-    }
-    // m_logs.insert(m_logs.end(), recvLog.begin(), recvLog.end());
-    for(const auto& log : recvLog){
-        push_backLog(log);
-    }
-    saveRaftState();
-    logSize = m_logs.size();
-    if(m_commitIndex < args.m_leaderCommit){
-        m_commitIndex = min(args.m_leaderCommit, logSize);
-    }
-    for(auto a : m_logs) printf("%d ", a.m_term);
-    printf(" [%d] sync success\n", peer_id);
-    m_lock.unlock();
-    reply.m_success = true;
-    return reply;
-}
-
-std::pair<int, bool> Raft::getState(){
-    std::pair<int, bool> serverState;
-    serverState.first = curr_term;
-    serverState.second = (m_state == LEADER);
-    return serverState;
-}
-
-void Raft::kill(){
-    dead = 1;
-} 
-
-StartRet Raft::start(Operation op){
-    StartRet ret;
-    m_lock.lock();
-    RAFT_STATE state = m_state;
-    if(state != LEADER){
-        m_lock.unlock();
-        return ret;
-    }
-    ret.cmd_index = m_logs.size();
-    ret.curr_term = curr_term;
-    ret.is_leader = true;
-
-    LogEntry log;
-    log.command = op.GetCmd();
-    log.m_term = curr_term;
-    push_backLog(log);
-    m_lock.unlock();
-    
-    return ret;
-}
-
-void Raft::printLogs(){
-    for(auto a : m_logs){
-        printf("logs : %d\n", a.m_term);
-    }
-    cout<<endl;
-}
-
-void Raft::serialize(){
-    std::string str;
-    str += to_string(this->persister.curr_term) + ";" + to_string(this->persister.voted_for) + ";";
-    for(const auto& log : this->persister.logs){
-        str += log.command + "," + to_string(log.m_term) + ".";
-    }
-    std::string filename = "persister-" + to_string(peer_id);
-    int fd = open(filename.c_str(), O_WRONLY | O_CREAT, 0664);
-    if(fd == -1){
-        perror("open");
-        exit(-1);
-    }
-    int len = write(fd, str.c_str(), str.size());
-}
-
-bool Raft::deserialize(){
-    std::string filename = "persister-" + to_string(peer_id);
-    if(access(filename.c_str(), F_OK) == -1) return false;
-    int fd = open(filename.c_str(), O_RDONLY);
-    if(fd == -1){
-        perror("open");
-        return false;
-    }
-    int length = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    char buf[length];
-    bzero(buf, length);
-    int len = read(fd, buf, length);
-    if(len != length){
-        perror("read");
-        exit(-1);
-    }
-    std::string content(buf);
-    std::vector<std::string> persist;
-    std::string tmp = "";
-    for(int i = 0; i < content.size(); i++){
-        if(content[i] != ';'){
-            tmp += content[i];
-        }else{
-            if(tmp.size() != 0) persist.push_back(tmp);
-            tmp = "";
-        }
-    }
-    persist.push_back(tmp);
-    this->persister.curr_term = atoi(persist[0].c_str());
-    this->persister.voted_for = atoi(persist[1].c_str());
-    std::vector<std::string> log;
-    std::vector<LogEntry> logs;
-    tmp = "";
-    for(int i = 0; i < persist[2].size(); i++){
-        if(persist[2][i] != '.'){
-            tmp += persist[2][i];
-        }else{
-            if(tmp.size() != 0) log.push_back(tmp);
-            tmp = "";
-        }
-    }
-    for(int i = 0; i < log.size(); i++){
-        tmp = "";
-        int j = 0;
-        for(; j < log[i].size(); j++){
-            if(log[i][j] != ','){
-                tmp += log[i][j];
-            }else break;
-        }
-        std::string number(log[i].begin() + j + 1, log[i].end());
-        int num = atoi(number.c_str());
-        logs.push_back(LogEntry(tmp, num));
-    }
-    this->persister.logs = logs;
     return true;
+  }
+  if (term > logs_.back().term) {
+    m_lock.unlock();
+    return true;
+  }
+  if (term == logs_.back().term && index >= logs_.size()) {
+    m_lock.unlock();
+    return true;
+  }
+  m_lock.unlock();
+  return false;
 }
 
-void Raft::readRaftState(){
-    //只在初始化的时候调用，没必要加锁，因为run()在其之后才执行
-    bool ret = this->deserialize();
-    if(!ret) return;
-    this->curr_term = this->persister.curr_term;
-    this->m_votedFor = this->persister.voted_for;
+RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
+  RequestVoteReply reply;
+  reply.vote_granted = false;
+  m_lock.lock();
+  reply.term = curr_term_;
 
-    for(const auto& log : this->persister.logs){
-        push_backLog(log);
-    }
-    printf(" [%d]'s term : %d, votefor : %d, logs.size() : %d\n", peer_id, curr_term, m_votedFor, m_logs.size());
+  if (curr_term_ > args.term) {
+    m_lock.unlock();
+    return reply;
+  }
+
+  if (curr_term_ < args.term) {
+    state_ = FOLLOWER;
+    curr_term_ = args.term;
+    voted_for_ = -1;
+  }
+
+  if (voted_for_ == -1 || voted_for_ == args.candidate_id) {
+    m_lock.unlock();
+    bool ret = CheckLogUptodate(args.last_log_term, args.last_log_index);
+    if (!ret) return reply;
+
+    m_lock.lock();
+    voted_for_ = args.candidate_id;
+    reply.vote_granted = true;
+    printf("[%d] vote to [%d] at %d, duration is %d\n", peer_id_,
+           args.candidate_id, curr_term_, GetMyduration(last_wake_time_));
+    gettimeofday(&last_wake_time_, nullptr);
+  }
+  SaveRaftState();
+  m_lock.unlock();
+  return reply;
 }
 
-void Raft::saveRaftState(){
-    persister.curr_term = curr_term;
-    persister.voted_for = m_votedFor;
-    persister.logs = m_logs;
-    serialize();
+void* Raft::ProcessEntriesLoop(void* arg) {
+  Raft* raft = (Raft*)arg;
+  while (!raft->is_dead_) {
+    ::usleep(1000);
+    raft->m_lock.lock();
+    if (raft->state_ != LEADER) {
+      raft->m_lock.unlock();
+      continue;
+    }
+
+    // printf("sec : %ld, usec : %ld\n", raft->last_broadcast_time_.tv_sec,
+    // raft->last_broadcast_time_.tv_usec);
+    int during_time = raft->GetMyduration(raft->last_broadcast_time_);
+    // printf("time is %d\n", during_time);
+    if (during_time < HEART_BEART_PERIOD) {
+      raft->m_lock.unlock();
+      continue;
+    }
+
+    gettimeofday(&raft->last_broadcast_time_, nullptr);
+    // printf("%d send AppendRetries at %d\n", raft->peer_id_,
+    // raft->curr_term_);
+    raft->m_lock.unlock();
+    pthread_t tid[raft->peers_.size() - 1];
+    int i = 0;
+    for (auto server : raft->peers_) {
+      if (server.peer_id_ == raft->peer_id_) continue;
+      pthread_create(tid + i, nullptr, SendAppendEntries, raft);
+      pthread_detach(tid[i]);
+      i++;
+    }
+  }
 }
 
-int main(int argc, char* argv[]){
-    if(argc < 2){
-        printf("loss parameter of peersNum\n");
-        exit(-1);
+std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
+  std::vector<LogEntry> logs;
+  int n = text.size();
+  std::vector<std::string> str;
+  std::string tmp = "";
+  for (int i = 0; i < n; i++) {
+    if (text[i] != ';') {
+      tmp += text[i];
+    } else {
+      if (tmp.size() != 0) str.push_back(tmp);
+      tmp = "";
     }
-    int peersNum = atoi(argv[1]);
-    if(peersNum % 2 == 0){
-        printf("the peersNum should be odd\n");  //必须传入奇数，这是raft集群的要求
-        exit(-1);
+  }
+  for (int i = 0; i < str.size(); i++) {
+    tmp = "";
+    int j = 0;
+    for (; j < str[i].size(); j++) {
+      if (str[i][j] != ',') {
+        tmp += str[i][j];
+      } else
+        break;
     }
-    srand((unsigned)time(NULL));
-    std::vector<PeersInfo> peers(peersNum);
-    for(int i = 0; i < peersNum; i++){
-        peers[i].peer_id = i;
-        peers[i].port.first = COMMOM_PORT + i;                    //vote的RPC端口
-        peers[i].port.second = COMMOM_PORT + i + peers.size();    //append的RPC端口
-        // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].peer_id, peers[i].port.first, peers[i].port.second);
-    }
+    std::string number(str[i].begin() + j + 1, str[i].end());
+    int num = atoi(number.c_str());
+    logs.push_back(LogEntry(tmp, num));
+  }
+  return logs;
+}
 
-    Raft* raft = new Raft[peers.size()];
-    for(int i = 0; i < peers.size(); i++){
-        raft[i].Make(peers, i);
-    }
+void Raft::PushBackLog(LogEntry log) { logs_.push_back(log); }
 
-    //------------------------------test部分--------------------------
-    usleep(400000);
-    for(int i = 0; i < peers.size(); i++){
-        if(raft[i].getState().second){
-            for(int j = 0; j < 1000; j++){
-                Operation opera;
-                opera.op = "put";opera.key = to_string(j);opera.value = to_string(j);
-                raft[i].start(opera);
-                usleep(50000);
-            }
-        }else continue;
+void* Raft::SendAppendEntries(void* arg) {
+  Raft* raft = (Raft*)arg;
+  buttonrpc client;
+  AppendEntriesArgs args;
+  raft->m_lock.lock();
+
+  if (raft->curr_peer_id_ == raft->peer_id_) {
+    raft->curr_peer_id_++;
+  }
+  int clientPeerId = raft->curr_peer_id_;
+  client.as_client("127.0.0.1",
+                   raft->peers_[raft->curr_peer_id_++].port.second);
+
+  args.term = raft->curr_term_;
+  args.leader_id_ = raft->peer_id_;
+  args.prev_log_index = raft->next_index_[clientPeerId] - 1;
+  args.leader_commit = raft->commit_index_;
+
+  for (int i = args.prev_log_index; i < raft->logs_.size(); i++) {
+    args.send_logs +=
+        (raft->logs_[i].command + "," + to_string(raft->logs_[i].term) + ";");
+  }
+  if (args.prev_log_index == 0) {
+    args.prev_log_term = 0;
+    if (raft->logs_.size() != 0) {
+      args.prev_log_term = raft->logs_[0].term;
     }
-    usleep(400000);
-    for(int i = 0; i < peers.size(); i++){
-        if(raft[i].getState().second){
-            raft[i].kill();              //kill后选举及心跳的线程会宕机，会产生新的leader，很久之后了，因为上面传了1000条日志
-            break;
+  } else
+    args.prev_log_term = raft->logs_[args.prev_log_index - 1].term;
+
+  printf("[%d] -> [%d]'s prevLogIndex : %d, prevLogTerm : %d\n", raft->peer_id_,
+         clientPeerId, args.prev_log_index, args.prev_log_term);
+
+  if (raft->curr_peer_id_ == raft->peers_.size() ||
+      (raft->curr_peer_id_ == raft->peers_.size() - 1 &&
+       raft->peer_id_ == raft->curr_peer_id_)) {
+    raft->curr_peer_id_ = 0;
+  }
+  raft->m_lock.unlock();
+  AppendEntriesReply reply =
+      client.call<AppendEntriesReply>("AppendEntries", args).val();
+
+  raft->m_lock.lock();
+  if (reply.term > raft->curr_term_) {
+    raft->state_ = FOLLOWER;
+    raft->curr_term_ = reply.term;
+    raft->voted_for_ = -1;
+    raft->SaveRaftState();
+    raft->m_lock.unlock();
+    return nullptr;  // FOLLOWER没必要维护nextIndex,成为leader会更新
+  }
+
+  if (reply.is_successful) {
+    raft->next_index_[clientPeerId] +=
+        raft->GetCmdAndTerm(args.send_logs).size();
+    raft->match_index_[clientPeerId] = raft->next_index_[clientPeerId] - 1;
+
+    std::vector<int> tmpIndex = raft->match_index_;
+    sort(tmpIndex.begin(), tmpIndex.end());
+    int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
+    if (realMajorityMatchIndex > raft->commit_index_ &&
+        raft->logs_[realMajorityMatchIndex - 1].term == raft->curr_term_) {
+      raft->commit_index_ = realMajorityMatchIndex;
+    }
+  }
+
+  if (!reply.is_successful) {
+    // if(!raft->m_firstIndexOfEachTerm.count(reply.conflict_term)){
+    //     raft->next_index_[clientPeerId]--;
+    // }else{
+    //     raft->next_index_[clientPeerId] = min(reply.conflict_index,
+    //     raft->m_firstIndexOfEachTerm[reply.conflict_term]);
+    // }
+
+    if (reply.conflict_term != -1) {
+      int leader_conflict_index = -1;
+      for (int index = args.prev_log_index; index >= 1; index--) {
+        if (raft->logs_[index - 1].term == reply.conflict_term) {
+          leader_conflict_index = index;
+          break;
         }
+      }
+      if (leader_conflict_index != -1) {
+        raft->next_index_[clientPeerId] = leader_conflict_index + 1;
+      } else {
+        raft->next_index_[clientPeerId] = reply.conflict_index;
+      }
+    } else {
+      raft->next_index_[clientPeerId] = reply.conflict_index + 1;
     }
-    //------------------------------test部分--------------------------
-    while(1);
+  }
+  raft->SaveRaftState();
+  raft->m_lock.unlock();
+}
+
+AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
+  std::vector<LogEntry> recvLog = GetCmdAndTerm(args.send_logs);
+  AppendEntriesReply reply;
+  m_lock.lock();
+  reply.term = curr_term_;
+  reply.is_successful = false;
+  reply.conflict_index = -1;
+  reply.conflict_term = -1;
+
+  if (args.term < curr_term_) {
+    m_lock.unlock();
+    return reply;
+  }
+
+  if (args.term >= curr_term_) {
+    if (args.term > curr_term_) {
+      voted_for_ = -1;
+      SaveRaftState();
+    }
+    curr_term_ = args.term;
+    state_ = FOLLOWER;
+  }
+  printf(
+      "[%d] recv append from [%d] at self term%d, send term %d, duration is "
+      "%d\n",
+      peer_id_, args.leader_id_, curr_term_, args.term,
+      GetMyduration(last_wake_time_));
+  gettimeofday(&last_wake_time_, nullptr);
+  // persister_()
+
+  int logSize = 0;
+  if (logs_.size() == 0) {
+    for (const auto& log : recvLog) {
+      PushBackLog(log);
+    }
+    SaveRaftState();
+    logSize = logs_.size();
+    if (commit_index_ < args.leader_commit) {
+      commit_index_ = min(args.leader_commit, logSize);
+    }
+    // persister_.persist_lock.lock();
+    // persister_.curr_term_ = curr_term_;
+    // persister_.voted_for_ = voted_for_;
+    // persister_.logs = logs_;
+    // persister_.persist_lock.unlock();
+    m_lock.unlock();
+    reply.is_successful = true;
+    // SaveRaftState();
+    return reply;
+  }
+
+  if (logs_.size() < args.prev_log_index) {
+    printf(" [%d]'s logs.size : %d < [%d]'s prevLogIdx : %d\n", peer_id_,
+           logs_.size(), args.leader_id_, args.prev_log_index);
+    reply.conflict_index = logs_.size();  //索引要加1
+    m_lock.unlock();
+    reply.is_successful = false;
+    return reply;
+  }
+  if (args.prev_log_index > 0 &&
+      logs_[args.prev_log_index - 1].term != args.prev_log_term) {
+    printf(" [%d]'s prevLogterm : %d != [%d]'s prevLogTerm : %d\n", peer_id_,
+           logs_[args.prev_log_index - 1].term, args.leader_id_,
+           args.prev_log_term);
+
+    reply.conflict_term = logs_[args.prev_log_index - 1].term;
+    for (int index = 1; index <= args.prev_log_index; index++) {
+      if (logs_[index - 1].term == reply.conflict_term) {
+        reply.conflict_index = index;  //找到冲突term的第一个index,比索引要加1
+        break;
+      }
+    }
+    m_lock.unlock();
+    reply.is_successful = false;
+    return reply;
+  }
+
+  logSize = logs_.size();
+  for (int i = args.prev_log_index; i < logSize; i++) {
+    logs_.pop_back();
+  }
+  // logs_.insert(logs_.end(), recvLog.begin(), recvLog.end());
+  for (const auto& log : recvLog) {
+    PushBackLog(log);
+  }
+  SaveRaftState();
+  logSize = logs_.size();
+  if (commit_index_ < args.leader_commit) {
+    commit_index_ = min(args.leader_commit, logSize);
+  }
+  for (auto a : logs_) printf("%d ", a.term);
+  printf(" [%d] sync success\n", peer_id_);
+  m_lock.unlock();
+  reply.is_successful = true;
+  return reply;
+}
+
+std::pair<int, bool> Raft::GetState() {
+  std::pair<int, bool> serverState;
+  serverState.first = curr_term_;
+  serverState.second = (state_ == LEADER);
+  return serverState;
+}
+
+void Raft::Kill() { is_dead_ = 1; }
+
+StartRet Raft::Start(Operation op) {
+  StartRet ret;
+  m_lock.lock();
+  RAFT_STATE state = state_;
+  if (state != LEADER) {
+    m_lock.unlock();
+    return ret;
+  }
+  ret.cmd_index = logs_.size();
+  ret.curr_term_ = curr_term_;
+  ret.is_leader = true;
+
+  LogEntry log;
+  log.command = op.GetCmd();
+  log.term = curr_term_;
+  PushBackLog(log);
+  m_lock.unlock();
+
+  return ret;
+}
+
+void Raft::PrintLogs() {
+  for (auto a : logs_) {
+    printf("logs : %d\n", a.term);
+  }
+  cout << endl;
+}
+
+void Raft::Serialize() {
+  std::string str;
+  str += to_string(this->persister_.curr_term_) + ";" +
+         to_string(this->persister_.voted_for_) + ";";
+  for (const auto& log : this->persister_.logs) {
+    str += log.command + "," + to_string(log.term) + ".";
+  }
+  std::string filename = "persister_-" + to_string(peer_id_);
+  int fd = open(filename.c_str(), O_WRONLY | O_CREAT, 0664);
+  if (fd == -1) {
+    perror("open");
+    exit(-1);
+  }
+  int len = write(fd, str.c_str(), str.size());
+}
+
+bool Raft::Deserialize() {
+  std::string filename = "persister_-" + to_string(peer_id_);
+  if (access(filename.c_str(), F_OK) == -1) return false;
+  int fd = open(filename.c_str(), O_RDONLY);
+  if (fd == -1) {
+    perror("open");
+    return false;
+  }
+  int length = lseek(fd, 0, SEEK_END);
+  lseek(fd, 0, SEEK_SET);
+  char buf[length];
+  bzero(buf, length);
+  int len = read(fd, buf, length);
+  if (len != length) {
+    perror("read");
+    exit(-1);
+  }
+  std::string content(buf);
+  std::vector<std::string> persist;
+  std::string tmp = "";
+  for (int i = 0; i < content.size(); i++) {
+    if (content[i] != ';') {
+      tmp += content[i];
+    } else {
+      if (tmp.size() != 0) persist.push_back(tmp);
+      tmp = "";
+    }
+  }
+  persist.push_back(tmp);
+  this->persister_.curr_term_ = atoi(persist[0].c_str());
+  this->persister_.voted_for_ = atoi(persist[1].c_str());
+  std::vector<std::string> log;
+  std::vector<LogEntry> logs;
+  tmp = "";
+  for (int i = 0; i < persist[2].size(); i++) {
+    if (persist[2][i] != '.') {
+      tmp += persist[2][i];
+    } else {
+      if (tmp.size() != 0) log.push_back(tmp);
+      tmp = "";
+    }
+  }
+  for (int i = 0; i < log.size(); i++) {
+    tmp = "";
+    int j = 0;
+    for (; j < log[i].size(); j++) {
+      if (log[i][j] != ',') {
+        tmp += log[i][j];
+      } else
+        break;
+    }
+    std::string number(log[i].begin() + j + 1, log[i].end());
+    int num = atoi(number.c_str());
+    logs.push_back(LogEntry(tmp, num));
+  }
+  this->persister_.logs = logs;
+  return true;
+}
+
+void Raft::ReadRaftState() {
+  //只在初始化的时候调用，没必要加锁，因为run()在其之后才执行
+  bool ret = this->Deserialize();
+  if (!ret) return;
+  this->curr_term_ = this->persister_.curr_term_;
+  this->voted_for_ = this->persister_.voted_for_;
+
+  for (const auto& log : this->persister_.logs) {
+    PushBackLog(log);
+  }
+  printf(" [%d]'s term : %d, votefor : %d, logs.size() : %d\n", peer_id_,
+         curr_term_, voted_for_, logs_.size());
+}
+
+void Raft::SaveRaftState() {
+  persister_.curr_term_ = curr_term_;
+  persister_.voted_for_ = voted_for_;
+  persister_.logs = logs_;
+  Serialize();
+}
+
+int main(int argc, char* argv[]) {
+  if (argc < 2) {
+    printf("loss parameter of peersNum\n");
+    exit(-1);
+  }
+  int peersNum = atoi(argv[1]);
+  if (peersNum % 2 == 0) {
+    printf("the peersNum should be odd\n");  //必须传入奇数，这是raft集群的要求
+    exit(-1);
+  }
+  srand((unsigned)time(nullptr));
+  std::vector<PeersInfo> peers(peersNum);
+  for (int i = 0; i < peersNum; i++) {
+    peers[i].peer_id_ = i;
+    peers[i].port.first = COMMOM_PORT + i;                  // vote的RPC端口
+    peers[i].port.second = COMMOM_PORT + i + peers.size();  // append的RPC端口
+    // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].peer_id_,
+    // peers[i].port.first, peers[i].port.second);
+  }
+
+  Raft* raft = new Raft[peers.size()];
+  for (int i = 0; i < peers.size(); i++) {
+    raft[i].Make(peers, i);
+  }
+
+  //------------------------------test部分--------------------------
+  ::usleep(400000);
+  for (int i = 0; i < peers.size(); i++) {
+    if (raft[i].GetState().second) {
+      for (int j = 0; j < 1000; j++) {
+        Operation opera;
+        opera.op = "put";
+        opera.key = to_string(j);
+        opera.value = to_string(j);
+        raft[i].Start(opera);
+        ::usleep(50000);
+      }
+    } else
+      continue;
+  }
+  ::usleep(400000);
+  for (int i = 0; i < peers.size(); i++) {
+    if (raft[i].GetState().second) {
+      raft[i]
+          .Kill();  // kill后选举及心跳的线程会宕机，会产生新的leader，很久之后了，因为上面传了1000条日志
+      break;
+    }
+  }
+  //------------------------------test部分--------------------------
+  while (1)
+    ;
 }
