@@ -7,10 +7,11 @@ std::condition_variable Worker::cond_;
 
 //TODO:Ihash有什么用
 //对每个字符串求hash找到其对应要分配的reduce线程
-int Worker::Ihash(std::string str) {
+int Worker::Ihash(const std::string& str) {
+//int Worker::Ihash(std::string_view str) { //std::string_view是c++17特性
   int sum = 0;
-  for (int i = 0; i < str.size(); i++) {
-    sum += (str[i] - '0');  // TODO: not modern c++
+  for (auto c : str) {
+    sum += (c - '0');
   }
   return sum % reduce_task_num_;
 }
@@ -20,13 +21,26 @@ int Worker::Ihash(std::string str) {
 /// @brief 之所以不用任何参数是因为临时文件的命名格式固定
 /// @brief 临时文件命名格式为"mr-i-j"
 /// @brief 其中i为map_task_index, j为reduce_task_index
+/*
+void Worker::RemoveTmpFiles(){
+  string path;
+  for(int i = 0; i < map_task_num_; i++){
+    for(int j = 0; j < reduce_task_num_; j++){
+      path = "mr-" + stsd::to_string(i) + "-" + std::to_string(j);
+      int ret = ::access(path.c_str(), F_OK);
+      if(ret == 0) ::remove(path.c_str());
+    }
+  }
+}
+*/
 void Worker::RemoveTmpFiles() {
-  std::string tmp_file_path;
   for (int i = 0; i < map_task_num_; i++) {
     for (int j = 0; j < reduce_task_num_; j++) {
-      tmp_file_path = "mr-" + std::to_string(i) + "-" + std::to_string(j);
-      int ret = ::access(tmp_file_path.c_str(), F_OK);
-      if (ret == 0) ::remove(tmp_file_path.c_str()); // ret==0表示文件存在
+      std::string file_path_str = "mr-" + std::to_string(i) + "-" + std::to_string(j);
+      std::filesystem::path file_path(file_path_str); //<filesystem> is supported since c++17
+      if (std::filesystem::exists(file_path)) {
+        std::filesystem::remove(file_path);
+      }
     }
   }
 }
@@ -35,6 +49,7 @@ void Worker::RemoveTmpFiles() {
 /// @brief 取得  key:filename, value:content 的kv对作为map任务的输入
 /// @param file_name 就是map任务要处理的文件的名字
 /// @return key:filename, value:content 的kv对作为map任务的输入
+/*
 KeyValue Worker::GetContent(const std::string& file_name) {
   int fd = ::open(file_name.c_str(), O_RDONLY);
   int length = ::lseek(fd, 0, SEEK_END);
@@ -51,6 +66,21 @@ KeyValue Worker::GetContent(const std::string& file_name) {
   kv.value = std::string(buf);
   ::close(fd);
   return kv;
+}
+*/
+KeyValue Worker::GetContent(const std::string& file_name_str) {
+  auto file = std::ifstream(std::filesystem::path(file_name_str)); //此处前提是file_name_str文件处于运行的工作目录下
+  if (!file.is_open()) {
+    throw std::runtime_error("Failed to open file: " + file_name_str);
+  }
+  std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  //TODO: learning "most vexing parse"
+  //最小解析规则(most vexing parse), 如果函数的第一个参数不加括号，
+  //则此行代码会被解析为一个函数声明
+  if (content.empty()) {
+    throw std::runtime_error("Failed to read content from file: " + file_name_str);
+  }
+  return {file_name_str, content};
 }
 
 

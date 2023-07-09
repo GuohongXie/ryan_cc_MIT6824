@@ -26,6 +26,9 @@
 #include <condition_variable>
 //#include <any>
 #include <thread>
+#include <filesystem>
+#include <iterator>
+#include <fstream>
 
 #include "buttonrpc.hpp"
 
@@ -77,7 +80,10 @@ class Worker {
         map_task_num_(0),
         reduce_task_num_(0) {}
  
+
   ~Worker() {}
+  Worker(const Worker&) = delete;
+  Worker operator=(const Worker&) = delete;
 
   void* MapWorker(void* arg);
   void* ReduceWorker(void* arg);
@@ -90,9 +96,10 @@ class Worker {
   int reduce_task_num() const { return reduce_task_num_; }
 
  private:
-  int Ihash(std::string str);  //对每个字符串求hash找到其对应要分配的reduce线程
+
+  int Ihash(const std::string& str);  //对每个字符串求hash找到其对应要分配的reduce线程
   void MyWrite(int fd, std::vector<std::string>& str);  //用于最后写入磁盘的函数，输出最终结果
-  KeyValue GetContent(const std::string& file_name);
+  KeyValue GetContent(const std::string& file_name_str);
   std::vector<std::string> GetAllfile(std::string path, int op); //获取对应reduce编号的所有中间文件
   std::vector<KeyValue> MyShuffle(int reduce_task_num);  // vector中每个元素的形式为"abc 11111";
   void WriteKV(int fd, const KeyValue& kv);

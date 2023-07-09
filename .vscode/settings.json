@@ -68,6 +68,16 @@
     "variant": "cpp",
     "shared_mutex": "cpp",
     "any": "cpp",
-    "iomanip": "cpp"
+    "iomanip": "cpp",
+    "csetjmp": "cpp",
+    "csignal": "cpp",
+    "cfenv": "cpp",
+    "charconv": "cpp",
+    "codecvt": "cpp",
+    "cuchar": "cpp",
+    "unordered_set": "cpp",
+    "regex": "cpp",
+    "future": "cpp",
+    "scoped_allocator": "cpp"
   }
 }
