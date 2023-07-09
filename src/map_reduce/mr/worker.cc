@@ -47,7 +47,7 @@ void Worker::RemoveTmpFiles() {
 }
 
 /// @brief 取得  key:filename, value:content 的kv对作为map任务的输入
-/// @param file_name 就是map任务要处理的文件的名字
+/// @param file_name_str 就是map任务要处理的文件的名字
 /// @return key:filename, value:content 的kv对作为map任务的输入
 /*
 KeyValue Worker::GetContent(const std::string& file_name) {
