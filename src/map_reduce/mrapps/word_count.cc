@@ -1,7 +1,7 @@
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 struct KeyValue {
   std::string key;
@@ -31,11 +31,9 @@ std::vector<std::string> SplitTextIntoWords(const std::string& text) {
   return words;
 }
 
-
 /// @brief map_func，需要打包成动态库，并在worker中通过dlopen以及dlsym运行时加载
 /// @param kv 将文本按单词划分并以出现次数代表value长度存入keyValue
 /// @return 类似{"my 11111", "you 111"} 即文章中my出现了5次，you出现了3次
-
 
 extern "C" std::vector<KeyValue> MapFunc(const KeyValue& kv) {
   std::vector<KeyValue> result;
@@ -50,17 +48,17 @@ extern "C" std::vector<KeyValue> MapFunc(const KeyValue& kv) {
 }
 
 /// @brief reduce_func，也是动态加载，输出对特定keyValue的reduce结果
-/// @param kvs 
+/// @param kvs
 /// @return std::vector<std::string>
 
-extern "C" std::vector<std::string> ReduceFunc(const std::vector<KeyValue>& kvs) {
+extern "C" std::vector<std::string> ReduceFunc(
+    const std::vector<KeyValue>& kvs) {
   std::vector<std::string> result;
   for (const auto& kv : kvs) {
     result.push_back(std::to_string(kv.value.size()));
   }
   return result;
 }
-
 
 #if 0
 int main() {

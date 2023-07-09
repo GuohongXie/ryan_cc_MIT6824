@@ -1,5 +1,5 @@
-#include "coordinator.h"
 #include "buttonrpc.hpp"
+#include "coordinator.h"
 constexpr int RPC_SERVER_PORT = 5555;
 
 int main(int argc, char* argv[]) {
@@ -10,16 +10,19 @@ int main(int argc, char* argv[]) {
   // alarm(10);
   buttonrpc coordinator_server;
   coordinator_server.as_server(RPC_SERVER_PORT);
-  Coordinator coordinator(13, 9);  //map_num, reduce_num
+  Coordinator coordinator(13, 9);  // map_num, reduce_num
   coordinator.GetAllFile(argc, argv);
   coordinator_server.bind("map_num", &Coordinator::map_num, &coordinator);
   coordinator_server.bind("reduce_num", &Coordinator::reduce_num, &coordinator);
   coordinator_server.bind("AssignTask", &Coordinator::AssignTask, &coordinator);
   coordinator_server.bind("SetMapStat", &Coordinator::SetMapStat, &coordinator);
   coordinator_server.bind("IsMapDone", &Coordinator::IsMapDone, &coordinator);
-  coordinator_server.bind("AssignReduceTask", &Coordinator::AssignReduceTask, &coordinator);
-  coordinator_server.bind("SetReduceStat", &Coordinator::SetReduceStat, &coordinator);
-  coordinator_server.bind("IsAllMapAndReduceDone", &Coordinator::IsAllMapAndReduceDone, &coordinator);
+  coordinator_server.bind("AssignReduceTask", &Coordinator::AssignReduceTask,
+                          &coordinator);
+  coordinator_server.bind("SetReduceStat", &Coordinator::SetReduceStat,
+                          &coordinator);
+  coordinator_server.bind("IsAllMapAndReduceDone",
+                          &Coordinator::IsAllMapAndReduceDone, &coordinator);
   coordinator_server.run();
   return 0;
 }
