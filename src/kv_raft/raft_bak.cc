@@ -482,7 +482,6 @@ void* Raft::ElectionLoop(void* arg) {
 
         while (raft->recv_votes_ <= raft->peers_.size() / 2 &&
                raft->finished_vote_ != raft->peers_.size()) {
-          std::unique_lock<std::mutex> lock(raft->mutex_);
           raft->cond_.wait(lock);
         }
         if (raft->state_ != CANDIDATE) {

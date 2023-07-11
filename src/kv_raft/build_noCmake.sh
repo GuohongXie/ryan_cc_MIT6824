@@ -2,6 +2,8 @@
 
 set -x
 
+rm persis*
+rm raft
 g++ -o0 -g -std=c++17 raft.cc -I../buttonrpc -lzmq -pthread -o raft
 
 
