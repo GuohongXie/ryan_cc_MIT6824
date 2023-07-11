@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "raft.hpp"
+#include "locker.h"
 using namespace std;
 
 #define EVERY_SERVER_PORT 3

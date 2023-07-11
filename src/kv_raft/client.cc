@@ -1,6 +1,7 @@
 #include <bits/stdc++.h>
 
 #include "raft.hpp"
+#include "locker.h"
 using namespace std;
 
 // class ServerInfo{
