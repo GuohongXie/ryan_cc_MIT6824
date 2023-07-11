@@ -108,7 +108,7 @@ Operation ApplyMsg::getOperation(){
 
 class PeersInfo{
 public:
-    pair<int, int> port;
+    pair<int, int> m_port;
     int m_peerId;
     bool isInstallFlag;
 };
@@ -189,33 +189,33 @@ public:
     void Make(vector<PeersInfo> peers, int id);
     int getMyduration(timeval last);
     void setBroadcastTime();
-    pair<int, bool> GetState();
+    pair<int, bool> getState();
     RequestVoteReply requestVote(RequestVoteArgs args);   
     AppendEntriesReply appendEntries(AppendEntriesArgs args);
     InstallSnapSHotReply installSnapShot(InstallSnapShotArgs args);     //安装快照的RPChandler，处理逻辑看论文
     bool checkLogUptodate(int term, int index);
     void push_backLog(LogEntry log);
     vector<LogEntry> getCmdAndTerm(string text);
-    StartRet Start(Operation op);
+    StartRet start(Operation op);
     void printLogs();
-    void SetSendSem(int num);           //初始化send的信号量，结合kvServer层的有名管道fifo模拟go的select及channel
-    void SetRecvSem(int num);           //初始化recv的信号量，结合kvServer层的有名管道fifo模拟go的select及channel
-    bool WaitSendSem();                 //信号量函数封装，用于类复合时kvServer的类外调用
+    void setSendSem(int num);           //初始化send的信号量，结合kvServer层的有名管道fifo模拟go的select及channel
+    void setRecvSem(int num);           //初始化recv的信号量，结合kvServer层的有名管道fifo模拟go的select及channel
+    bool waitSendSem();                 //信号量函数封装，用于类复合时kvServer的类外调用
     bool waitRecvSem();                 //信号量函数封装，用于类复合时kvServer的类外调用
     bool postSendSem();                 //信号量函数封装，用于类复合时kvServer的类外调用
-    bool PostRecvSem();                 //信号量函数封装，用于类复合时kvServer的类外调用
-    ApplyMsg GetBackMsg();              //取得一个msg，结合信号量和fifo模拟go的select及channel，每次只取一个，处理完再取
+    bool postRecvSem();                 //信号量函数封装，用于类复合时kvServer的类外调用
+    ApplyMsg getBackMsg();              //取得一个msg，结合信号量和fifo模拟go的select及channel，每次只取一个，处理完再取
 
     void serialize();
     bool deserialize();
     void saveRaftState();
     void readRaftState();
     bool isKilled();  //->check is killed?
-    void Kill();  
-    void Activate();
+    void kill();  
+    void activate();
 
     bool ExceedLogSize(int size);                               //超出日志大小则需要快照，kvServer层需要有个守护线程持续调用该函数判断
-    void RecvSnapShot(string snapShot, int lastIncludedIndex);  //接受来自kvServer层的快照，用于持久化
+    void recvSnapShot(string snapShot, int lastIncludedIndex);  //接受来自kvServer层的快照，用于持久化
     int idxToCompressLogPos(int index);                         //获得原先索引在截断日志后的索引
     bool readSnapShot();                                        //读取快照
     void saveSnapShot();                                        //持久化快照
@@ -381,7 +381,7 @@ void Raft::setBroadcastTime(){
 void* Raft::listenForVote(void* arg){
     Raft* raft = (Raft*)arg;
     buttonrpc server;
-    server.as_server(raft->m_peers[raft->m_peerId].port.first);
+    server.as_server(raft->m_peers[raft->m_peerId].m_port.first);
     server.bind("requestVote", &Raft::requestVote, raft);
 
     pthread_t wait_tid;
@@ -395,7 +395,7 @@ void* Raft::listenForVote(void* arg){
 void* Raft::listenForAppend(void* arg){
     Raft* raft = (Raft*)arg;
     buttonrpc server;
-    server.as_server(raft->m_peers[raft->m_peerId].port.second);
+    server.as_server(raft->m_peers[raft->m_peerId].m_port.second);
     server.bind("appendEntries", &Raft::appendEntries, raft);
     server.bind("installSnapShot", &Raft::installSnapShot, raft);
     pthread_t heart_tid;
@@ -484,7 +484,7 @@ void* Raft::callRequestVote(void* arg){
         raft->cur_peerId++;     
     }
     int clientPeerId = raft->cur_peerId;
-    client.as_client("127.0.0.1", raft->m_peers[raft->cur_peerId++].port.first);
+    client.as_client("127.0.0.1", raft->m_peers[raft->cur_peerId++].m_port.first);
 
     if(raft->cur_peerId == raft->m_peers.size() || 
             (raft->cur_peerId == raft->m_peers.size() - 1 && raft->m_peerId == raft->cur_peerId)){
@@ -625,7 +625,7 @@ void* Raft::sendInstallSnapShot(void* arg){
         break;
     }
 
-    client.as_client("127.0.0.1", raft->m_peers[clientPeerId].port.second);
+    client.as_client("127.0.0.1", raft->m_peers[clientPeerId].m_port.second);
     
 
     if(raft->isExistIndex.size() == raft->m_peers.size() - 1){
@@ -646,7 +646,7 @@ void* Raft::sendInstallSnapShot(void* arg){
     printf("in send install snapShot is %s\n", args.snapShot.c_str());
 
     raft->m_lock.unlock();
-    // printf("%d send to %d's install port is %d\n", raft->m_peerId, clientPeerId, raft->m_peers[clientPeerId].port.second);
+    // printf("%d send to %d's install port is %d\n", raft->m_peerId, clientPeerId, raft->m_peers[clientPeerId].m_port.second);
     InstallSnapSHotReply reply = client.call<InstallSnapSHotReply>("installSnapShot", args).val();
     // printf("%d is called send install to %d\n", raft->m_peerId, clientPeerId);
 
@@ -784,8 +784,8 @@ void* Raft::sendAppendEntries(void* arg){
         break;
     }
 
-    client.as_client("127.0.0.1", raft->m_peers[clientPeerId].port.second);
-    // printf("%d send to %d's append port is %d\n", raft->m_peerId, clientPeerId, raft->m_peers[clientPeerId].port.second);
+    client.as_client("127.0.0.1", raft->m_peers[clientPeerId].m_port.second);
+    // printf("%d send to %d's append port is %d\n", raft->m_peerId, clientPeerId, raft->m_peers[clientPeerId].m_port.second);
 
     if(raft->isExistIndex.size() == raft->m_peers.size() - 1){
         // printf("append clear size is %d\n", raft->isExistIndex.size());
@@ -978,24 +978,24 @@ AppendEntriesReply Raft::appendEntries(AppendEntriesArgs args){
     return reply;
 }
 
-pair<int, bool> Raft::GetState(){
+pair<int, bool> Raft::getState(){
     pair<int, bool> serverState;
     serverState.first = m_curTerm;
     serverState.second = (m_state == LEADER);
     return serverState;
 }
 
-void Raft::Kill(){
+void Raft::kill(){
     dead = 1;
     printf("raft%d is dead\n", m_peerId);
 } 
 
-void Raft::Activate(){
+void Raft::activate(){
     dead = 0;
-    printf("raft%d is Activate\n", m_peerId);
+    printf("raft%d is activate\n", m_peerId);
 }
 
-StartRet Raft::Start(Operation op){
+StartRet Raft::start(Operation op){
     StartRet ret;
     m_lock.lock();
     RAFT_STATE state = m_state;
@@ -1126,14 +1126,14 @@ void Raft::saveRaftState(){
     serialize();
 }
 
-void Raft::SetSendSem(int num){
+void Raft::setSendSem(int num){
     m_sendSem.init(num);
 }
-void Raft::SetRecvSem(int num){
+void Raft::setRecvSem(int num){
     m_recvSem.init(num);
 }
 
-bool Raft::WaitSendSem(){
+bool Raft::waitSendSem(){
     return m_sendSem.wait();
 }
 bool Raft::waitRecvSem(){
@@ -1142,11 +1142,11 @@ bool Raft::waitRecvSem(){
 bool Raft::postSendSem(){
     return m_sendSem.post();
 }
-bool Raft::PostRecvSem(){
+bool Raft::postRecvSem(){
     return m_recvSem.post();
 }
 
-ApplyMsg Raft::GetBackMsg(){
+ApplyMsg Raft::getBackMsg(){
     return m_msgs.back();
 }
 
@@ -1165,7 +1165,7 @@ bool Raft::ExceedLogSize(int size){
     return ret;
 }
 
-void Raft::RecvSnapShot(string snapShot, int lastIncludedIndex){
+void Raft::recvSnapShot(string snapShot, int lastIncludedIndex){
     m_lock.lock();
 
     if(lastIncludedIndex < this->m_lastIncludedIndex){
@@ -1302,9 +1302,9 @@ int Raft::lastTerm(){
     // vector<PeersInfo> peers(peersNum);
     // for(int i = 0; i < peersNum; i++){
     //     peers[i].m_peerId = i;
-    //     peers[i].port.first = COMMOM_PORT + i;
-    //     peers[i].port.second = COMMOM_PORT + i + peers.size();
-    //     // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].m_peerId, peers[i].port.first, peers[i].port.second);
+    //     peers[i].m_port.first = COMMOM_PORT + i;
+    //     peers[i].m_port.second = COMMOM_PORT + i + peers.size();
+    //     // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].m_peerId, peers[i].m_port.first, peers[i].m_port.second);
     // }
 
 //     Raft* raft = new Raft[peers.size()];
@@ -1314,19 +1314,19 @@ int Raft::lastTerm(){
 
 //     usleep(400000);
 //     for(int i = 0; i < peers.size(); i++){
-//         if(raft[i].GetState().second){
+//         if(raft[i].getState().second){
 //             for(int j = 0; j < 1000; j++){
 //                 Operation opera;
 //                 opera.op = "put";opera.key = to_string(j);opera.value = to_string(j);
-//                 raft[i].Start(opera);
+//                 raft[i].start(opera);
 //                 usleep(50000);
 //             }
 //         }else continue;
 //     }
 //     usleep(400000);
 //     for(int i = 0; i < peers.size(); i++){
-//         if(raft[i].GetState().second){
-//             raft[i].Kill();
+//         if(raft[i].getState().second){
+//             raft[i].kill();
 //             break;
 //         }
 //     }

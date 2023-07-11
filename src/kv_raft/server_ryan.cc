@@ -1,13 +1,13 @@
-#include <bits/stdc++.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <thread>
+#include <climits>
+#include <limits>
 
 #include "raft_ryan.hpp"
-#include "locker.h"
 
 constexpr int EVERY_SERVER_PORT = 3;
 
@@ -18,38 +18,38 @@ constexpr std::chrono::microseconds myDuration(const myClock::duration& d) {
 }
 //#define myDuration std::chrono::duration_cast<std::chrono::microseconds>
 
-class kvServerInfo {
- public:
-  PeersInfo peersInfo;
-  std::vector<int> m_kvPort;
+struct KVServerInfo {
+  PeersInfo peers_info;
+  std::vector<int> kv_ports;
 };
 
 //用于定时的类，创建一个有名管道，若在指定时间内收到msg则处理业务逻辑，不然按照超时处理重试
 class Select {
  public:
-  Select(std::string fifoName);
-  std::string fifoName;
-  bool isRecved;
-  static void* work(void* arg);
+  Select(std::string fifo_name);
+  std::string fifo_name;
+  bool is_recved;
+  static void* Work(void* arg);
 };
 
-Select::Select(std::string fifoName) {
-  this->fifoName = fifoName;
-  isRecved = false;
-  int ret = mkfifo(fifoName.c_str(), 0664);
-  pthread_t test_tid;
-  pthread_create(&test_tid, NULL, work, this);
-  pthread_detach(test_tid);
+Select::Select(std::string fifo_name) {
+  this->fifo_name = fifo_name;
+  is_recved = false;
+  int ret = ::mkfifo(fifo_name.c_str(), 0664);
+  std::thread(&Select::Work, this).detach();
+  //pthread_t test_tid;
+  //pthread_create(&test_tid, NULL, Work, this);
+  //pthread_detach(test_tid);
 }
 
-void* Select::work(void* arg) {
+void* Select::Work(void* arg) {
   Select* select = (Select*)arg;
   char buf[100];
-  int fd = ::open(select->fifoName.c_str(), O_RDONLY);
+  int fd = ::open(select->fifo_name.c_str(), O_RDONLY);
   ::read(fd, buf, sizeof(buf));
-  select->isRecved = true;
+  select->is_recved = true;
   ::close(fd);
-  ::unlink(select->fifoName.c_str());
+  ::unlink(select->fifo_name.c_str());
 }
 
 //用于保存处理客户端RPC请求时的上下文信息，每次调用start()且为leader时会存到对应的map中，key为start返回的日志index，独一无二
@@ -57,35 +57,35 @@ class OpContext {
  public:
   OpContext(Operation op);
   Operation op;
-  std::string fifoName;  //对应当前上下文的有名管道名称
-  bool isWrongLeader;
-  bool isIgnored;
+  std::string fifo_name;  //对应当前上下文的有名管道名称
+  bool is_wrong_leader;
+  bool is_ignored;
 
   //针对get请求
-  bool isKeyExisted;
+  bool is_key_existed;
   std::string value;
 };
 
 OpContext::OpContext(Operation op) {
   this->op = op;
-  fifoName = "fifo-" + to_string(op.client_id) + +"-" + to_string(op.request_id);
-  isWrongLeader = false;
-  isIgnored = false;
-  isKeyExisted = true;
+  fifo_name = "fifo-" + to_string(op.client_id) + +"-" + to_string(op.request_id);
+  is_wrong_leader = false;
+  is_ignored = false;
+  is_key_existed = true;
   value = "";
 }
 
 class GetArgs {
  public:
   std::string key;
-  int clientId;
-  int requestId;
+  int client_id;
+  int request_id;
   friend Serializer& operator>>(Serializer& in, GetArgs& d) {
-    in >> d.key >> d.clientId >> d.requestId;
+    in >> d.key >> d.client_id >> d.request_id;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, GetArgs d) {
-    out << d.key << d.clientId << d.requestId;
+    out << d.key << d.client_id << d.request_id;
     return out;
   }
 };
@@ -93,14 +93,14 @@ class GetArgs {
 class GetReply {
  public:
   std::string value;
-  bool isWrongLeader;
-  bool isKeyExist;
+  bool is_wrong_leader;
+  bool is_key_exist;
   friend Serializer& operator>>(Serializer& in, GetReply& d) {
-    in >> d.value >> d.isWrongLeader >> d.isKeyExist;
+    in >> d.value >> d.is_wrong_leader >> d.is_key_exist;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, GetReply d) {
-    out << d.value << d.isWrongLeader << d.isKeyExist;
+    out << d.value << d.is_wrong_leader << d.is_key_exist;
     return out;
   }
 };
@@ -110,21 +110,20 @@ class PutAppendArgs {
   std::string key;
   std::string value;
   std::string op;
-  int clientId;
-  int requestId;
+  int client_id;
+  int request_id;
   friend Serializer& operator>>(Serializer& in, PutAppendArgs& d) {
-    in >> d.key >> d.value >> d.op >> d.clientId >> d.requestId;
+    in >> d.key >> d.value >> d.op >> d.client_id >> d.request_id;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, PutAppendArgs d) {
-    out << d.key << d.value << d.op << d.clientId << d.requestId;
+    out << d.key << d.value << d.op << d.client_id << d.request_id;
     return out;
   }
 };
 
-class PutAppendReply {
- public:
-  bool isWrongLeader;
+struct PutAppendReply {
+  bool is_wrong_leader;
 };
 
 class KVServer {
@@ -133,8 +132,8 @@ class KVServer {
   static void* ApplyLoop(void* arg);  //持续监听raft层提交的msg的守护线程
   static void* SnapShotLoop(
       void* arg);  //持续监听raft层日志是否超过给定大小，判断进行快照的守护线程
-  void StartKvServer(std::vector<kvServerInfo>& kvInfo, int me, int maxRaftState);
-  std::vector<PeersInfo> GetRaftPort(std::vector<kvServerInfo>& kvInfo);
+  void StartKvServer(std::vector<KVServerInfo>& kvInfo, int me, int maxRaftState);
+  std::vector<PeersInfo> GetRaftPort(std::vector<KVServerInfo>& kvInfo);
   GetReply Get(GetArgs args);
   PutAppendReply PutAppend(PutAppendArgs args);
 
@@ -155,7 +154,6 @@ class KVServer {
  private:
   std::mutex mutex_;
   std::condition_variable cond_;
-  locker m_lock;
   Raft raft_;
   int id_;
   std::vector<int> port_;
@@ -171,10 +169,10 @@ class KVServer {
   std::unordered_map<int, OpContext*> request_map_;  //记录当前RPC对应的上下文
 };
 
-void KVServer::StartKvServer(std::vector<kvServerInfo>& kvInfo, int me,
+void KVServer::StartKvServer(std::vector<KVServerInfo>& kvInfo, int me,
                              int maxRaftState) {
   this->id_ = me;
-  port_ = kvInfo[me].m_kvPort;
+  port_ = kvInfo[me].kv_ports;
   std::vector<PeersInfo> peers = GetRaftPort(kvInfo);
   this->max_raft_state_ = maxRaftState;
   last_applied_index_ = 0;
@@ -223,22 +221,22 @@ void* KVServer::RPCServer(void* arg) {
 // PRChandler for Get-request
 GetReply KVServer::Get(GetArgs args) {
   GetReply reply;
-  reply.isWrongLeader = false;
-  reply.isKeyExist = true;
+  reply.is_wrong_leader = false;
+  reply.is_key_exist = true;
   Operation operation;
   operation.op = "Get";
   operation.key = args.key;
   operation.value = "random";
-  operation.client_id = args.clientId;
-  operation.request_id = args.requestId;
+  operation.client_id = args.client_id;
+  operation.request_id = args.request_id;
 
   StartRet ret = raft_.Start(operation);
   operation.term = ret.curr_term_;
   operation.index = ret.cmd_index;
 
   if (ret.is_leader == false) {
-    printf("client %d's Get request is wrong leader %d\n", args.clientId, id_);
-    reply.isWrongLeader = true;
+    printf("client %d's Get request is wrong leader %d\n", args.client_id, id_);
+    reply.is_wrong_leader = true;
     return reply;
   }
 
@@ -247,29 +245,29 @@ GetReply KVServer::Get(GetArgs args) {
   std::unique_lock<std::mutex> lock(mutex_);
   request_map_[ret.cmd_index] = &opctx;
   lock.unlock();
-  Select s(opctx.fifoName);  //创建监听管道数据的定时对象
+  Select s(opctx.fifo_name);  //创建监听管道数据的定时对象
   myTime curTime = myClock::now();
   while (myDuration(myClock::now() - curTime).count() < 2000000) {
-    if (s.isRecved) {
-      // printf("client %d's Get->time is %d\n", args.clientId,
+    if (s.is_recved) {
+      // printf("client %d's Get->time is %d\n", args.client_id,
       // myDuration(myClock::now() - curTime).count());
       break;
     }
     ::usleep(10000);
   }
 
-  if (s.isRecved) {
-    if (opctx.isWrongLeader) {
-      reply.isWrongLeader = true;
-    } else if (!opctx.isKeyExisted) {
-      reply.isKeyExist = false;
+  if (s.is_recved) {
+    if (opctx.is_wrong_leader) {
+      reply.is_wrong_leader = true;
+    } else if (!opctx.is_key_existed) {
+      reply.is_key_exist = false;
     } else {
       // printf("Get hit the key, value is %s\n", opctx.value.c_str());
       reply.value = opctx.value;
       // printf("Get hit the key, reply is %s\n", reply.value.c_str());
     }
   } else {
-    reply.isWrongLeader = true;
+    reply.is_wrong_leader = true;
     printf("in Get --------- timeout!!!\n");
   }
   lock.lock();
@@ -281,22 +279,22 @@ GetReply KVServer::Get(GetArgs args) {
 // PRChandler for put/append-request
 PutAppendReply KVServer::PutAppend(PutAppendArgs args) {
   PutAppendReply reply;
-  reply.isWrongLeader = false;
+  reply.is_wrong_leader = false;
   Operation operation;
   operation.op = args.op;
   operation.key = args.key;
   operation.value = args.value;
-  operation.client_id = args.clientId;
-  operation.request_id = args.requestId;
+  operation.client_id = args.client_id;
+  operation.request_id = args.request_id;
 
   StartRet ret = raft_.Start(operation);
 
   operation.term = ret.curr_term_;
   operation.index = ret.cmd_index;
   if (ret.is_leader == false) {
-    printf("client %d's PutAppend request is wrong leader %d\n", args.clientId,
+    printf("client %d's PutAppend request is wrong leader %d\n", args.client_id,
            id_);
-    reply.isWrongLeader = true;
+    reply.is_wrong_leader = true;
     return reply;
   }
 
@@ -306,26 +304,26 @@ PutAppendReply KVServer::PutAppend(PutAppendArgs args) {
   request_map_[ret.cmd_index] = &opctx;
   lock.unlock();
 
-  Select s(opctx.fifoName);  //创建监听管道数据的定时对象
+  Select s(opctx.fifo_name);  //创建监听管道数据的定时对象
   myTime curTime = myClock::now();
   while (myDuration(myClock::now() - curTime).count() < 2000000) {
-    if (s.isRecved) {
-      // printf("client %d's PutAppend->time is %d\n", args.clientId,
+    if (s.is_recved) {
+      // printf("client %d's PutAppend->time is %d\n", args.client_id,
       // myDuration(myClock::now() - curTime).count());
       break;
     }
     ::usleep(10000);
   }
 
-  if (s.isRecved) {
-    // printf("opctx.isWrongLeader : %d\n", opctx.isWrongLeader ? 1 : 0);
-    if (opctx.isWrongLeader) {
-      reply.isWrongLeader = true;
-    } else if (opctx.isIgnored) {
+  if (s.is_recved) {
+    // printf("opctx.is_wrong_leader : %d\n", opctx.is_wrong_leader ? 1 : 0);
+    if (opctx.is_wrong_leader) {
+      reply.is_wrong_leader = true;
+    } else if (opctx.is_ignored) {
       //啥也不管即可，请求过期需要被忽略，返回ok让客户端不管即可
     }
   } else {
-    reply.isWrongLeader = true;
+    reply.is_wrong_leader = true;
     printf("int PutAppend --------- timeout!!!\n");
   }
   lock.lock();
@@ -358,13 +356,13 @@ void* KVServer::ApplyLoop(void* arg) {
       std::unique_lock<std::mutex> lock(kv->mutex_);
       kv->last_applied_index_ = index;  //收到一个msg就更新m_lastAppliedIndex
       bool isOpExist = false, isSeqExist = false;
-      int prevRequestIdx = INT_MAX;
+      int prevRequestIdx = std::numeric_limits<int>::max();  //INT_MAX
       OpContext* opctx = NULL;
       if (kv->request_map_.count(index)) {
         isOpExist = true;
         opctx = kv->request_map_[index];
         if (opctx->op.term != operation.term) {
-          opctx->isWrongLeader = true;
+          opctx->is_wrong_leader = true;
           printf("not euqal term -> wrongLeader : opctx %d, op : %d\n",
                  opctx->op.term, operation.term);
         }
@@ -388,14 +386,14 @@ void* KVServer::ApplyLoop(void* arg) {
             }
           }
         } else if (isOpExist) {
-          opctx->isIgnored = true;
+          opctx->is_ignored = true;
         }
       } else {
         if (isOpExist) {
           if (kv->database_.count(operation.key)) {
             opctx->value = kv->database_[operation.key];  //如果有则返回value
           } else {
-            opctx->isKeyExisted = false;
+            opctx->is_key_existed = false;
             opctx->value = "";  //如果无返回""
           }
         }
@@ -405,7 +403,7 @@ void* KVServer::ApplyLoop(void* arg) {
 
       //保证只有存了上下文信息的leader才能唤醒管道，回应clerk的RPC请求(leader需要多做的工作)
       if (isOpExist) {
-        int fd = ::open(opctx->fifoName.c_str(), O_WRONLY);
+        int fd = ::open(opctx->fifo_name.c_str(), O_WRONLY);
         char* buf = "12345";
         ::write(fd, buf, strlen(buf) + 1);
         ::close(fd);
@@ -456,15 +454,15 @@ void* KVServer::SnapShotLoop(void* arg) {
   }
 }
 
-std::vector<kvServerInfo> GetKvServerPort(int num) {
-  std::vector<kvServerInfo> peers(num);
+std::vector<KVServerInfo> GetKvServerPort(int num) {
+  std::vector<KVServerInfo> peers(num);
   for (int i = 0; i < num; i++) {
-    peers[i].peersInfo.peer_id_ = i;
-    peers[i].peersInfo.port.first = COMMOM_PORT + i;
-    peers[i].peersInfo.port.second = COMMOM_PORT + i + num;
-    peers[i].peersInfo.is_install_flag = false;
+    peers[i].peers_info.peer_id_ = i;
+    peers[i].peers_info.port.first = COMMOM_PORT + i;
+    peers[i].peers_info.port.second = COMMOM_PORT + i + num;
+    peers[i].peers_info.is_install_flag = false;
     for (int j = 0; j < EVERY_SERVER_PORT; j++) {
-      peers[i].m_kvPort.push_back(COMMOM_PORT + i + (j + 2) * num);
+      peers[i].kv_ports.push_back(COMMOM_PORT + i + (j + 2) * num);
     }
     // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].m_peerId,
     // peers[i].port_.first, peers[i].port_.second);
@@ -472,11 +470,11 @@ std::vector<kvServerInfo> GetKvServerPort(int num) {
   return peers;
 }
 
-std::vector<PeersInfo> KVServer::GetRaftPort(std::vector<kvServerInfo>& kvInfo) {
+std::vector<PeersInfo> KVServer::GetRaftPort(std::vector<KVServerInfo>& kvInfo) {
   int n = kvInfo.size();
   std::vector<PeersInfo> ret(n);
   for (int i = 0; i < n; i++) {
-    ret[i] = kvInfo[i].peersInfo;
+    ret[i] = kvInfo[i].peers_info;
   }
   return ret;
 }
@@ -560,7 +558,7 @@ void KVServer::KillRaft() { raft_.Kill(); }
 void KVServer::ActivateRaft() { raft_.Activate(); }
 
 int main() {
-  std::vector<kvServerInfo> servers = GetKvServerPort(5);
+  std::vector<KVServerInfo> servers = GetKvServerPort(5);
   std::srand((unsigned)std::time(NULL));
 
   std::vector<std::unique_ptr<KVServer>> kv_servers;
