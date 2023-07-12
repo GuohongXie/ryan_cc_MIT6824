@@ -1,15 +1,13 @@
 #ifndef RYAN_DS_KV_RAFT_ARGUMENTS_H_
 #define RYAN_DS_KV_RAFT_ARGUMENTS_H_
 
-#include "raft_ryan.hpp"
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
-
+#include "raft.hpp"
 
 //用于定时的类，创建一个有名管道，若在指定时间内收到msg则处理业务逻辑，不然按照超时处理重试
-class Select {
- public:
+struct Select {
   Select(std::string fifo_name);
   std::string fifo_name;
   bool is_recved;
@@ -21,9 +19,9 @@ Select::Select(std::string fifo_name) {
   is_recved = false;
   int ret = ::mkfifo(fifo_name.c_str(), 0664);
   std::thread(&Select::Work, this).detach();
-  //pthread_t test_tid;
-  //pthread_create(&test_tid, NULL, Work, this);
-  //pthread_detach(test_tid);
+  // pthread_t test_tid;
+  // pthread_create(&test_tid, NULL, Work, this);
+  // pthread_detach(test_tid);
 }
 
 void* Select::Work(void* arg) {
@@ -37,8 +35,7 @@ void* Select::Work(void* arg) {
 }
 
 //用于保存处理客户端RPC请求时的上下文信息，每次调用start()且为leader时会存到对应的map中，key为start返回的日志index，独一无二
-class OpContext {
- public:
+struct OpContext {
   OpContext(Operation op);
   Operation op;
   std::string fifo_name;  //对应当前上下文的有名管道名称
@@ -52,15 +49,15 @@ class OpContext {
 
 OpContext::OpContext(Operation op) {
   this->op = op;
-  fifo_name = "fifo-" + to_string(op.client_id) + +"-" + to_string(op.request_id);
+  fifo_name = "fifo-" + std::to_string(op.client_id) + +"-" +
+              std::to_string(op.request_id);
   is_wrong_leader = false;
   is_ignored = false;
   is_key_existed = true;
   value = "";
 }
 
-class GetArgs {
- public:
+struct GetArgs {
   std::string key;
   int client_id;
   int request_id;
@@ -74,23 +71,21 @@ class GetArgs {
   }
 };
 
-class GetReply {
- public:
+struct GetReply {
   std::string value;
   bool is_wrong_leader;
-  bool is_key_exist;
+  bool isKeyExist;
   friend Serializer& operator>>(Serializer& in, GetReply& d) {
-    in >> d.value >> d.is_wrong_leader >> d.is_key_exist;
+    in >> d.value >> d.is_wrong_leader >> d.isKeyExist;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, GetReply d) {
-    out << d.value << d.is_wrong_leader << d.is_key_exist;
+    out << d.value << d.is_wrong_leader << d.isKeyExist;
     return out;
   }
 };
 
-class PutAppendArgs {
- public:
+struct PutAppendArgs {
   std::string key;
   std::string value;
   std::string op;
@@ -110,4 +105,4 @@ struct PutAppendReply {
   bool is_wrong_leader;
 };
 
-#endif //RYAN_DS_KV_RAFT_ARGUMENTS_H_
+#endif  // RYAN_DS_KV_RAFT_ARGUMENTS_H_

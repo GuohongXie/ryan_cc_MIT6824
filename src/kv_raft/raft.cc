@@ -1,3 +1,6 @@
+#ifndef RYAN_DS_KV_RAFT_RAFT_H_
+#define RYAN_DS_KV_RAFT_RAFT_H_
+
 #include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -26,33 +29,30 @@ constexpr int HEART_BEART_PERIOD = 100000;
  */
 
 //新增的快照RPC需要传的参数，具体看论文section7关于日志压缩的内容
-class InstallSnapShotArgs {
- public:
+struct InstallSnapShotArgs {
   int term;
   int leader_id;
   int last_included_index;
   int last_included_term;
-  std::string snap_shot;
+  std::string snapshot;
 
   friend Serializer& operator>>(Serializer& in, InstallSnapShotArgs& d) {
-    in >> d.term >> d.leader_id >> d.last_included_index >> d.last_included_term >>
-        d.snap_shot;
+    in >> d.term >> d.leader_id >> d.last_included_index >>
+        d.last_included_term >> d.snapshot;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, InstallSnapShotArgs d) {
-    out << d.term << d.leader_id << d.last_included_index << d.last_included_term
-        << d.snap_shot;
+    out << d.term << d.leader_id << d.last_included_index
+        << d.last_included_term << d.snapshot;
     return out;
   }
 };
 
-class InstallSnapSHotReply {
- public:
+struct InstallSnapSHotReply {
   int term;
 };
 
-class Operation {
- public:
+struct Operation {
   std::string GetCmd();
   std::string op;
   std::string key;
@@ -64,21 +64,20 @@ class Operation {
 };
 
 std::string Operation::GetCmd() {
-  std::string cmd = op + " " + key + " " + value + " " + std::to_string(client_id) + " " +
-               std::to_string(request_id);
+  std::string cmd = op + " " + key + " " + value + " " +
+                    std::to_string(client_id) + " " +
+                    std::to_string(request_id);
   return cmd;
 }
 
-class StartRet {
- public:
+struct StartRet {
   StartRet() : cmd_index(-1), curr_term_(-1), is_leader(false) {}
   int cmd_index;
   int curr_term_;
   bool is_leader;
 };
 
-class ApplyMsg {
- public:
+struct ApplyMsg {
   bool is_command_valid;
   std::string command;
   int command_index;
@@ -114,22 +113,20 @@ Operation ApplyMsg::GetOperation() {
   return operation;
 }
 
-class PeersInfo {
- public:
+struct PeersInfo {
   std::pair<int, int> port;
-  int peer_id_;
+  int peer_id;
   bool is_install_flag;
 };
 
-class LogEntry {
- public:
-  LogEntry(std::string cmd = "", int term = -1) : command_str(cmd), term(term) {}
+struct LogEntry {
+  LogEntry(std::string cmd = "", int term = -1)
+      : command_str(cmd), term(term) {}
   std::string command_str;
   int term;
 };
 
-class Persister {
- public:
+struct Persister {
   std::vector<LogEntry> logs;
   std::string snap_shot;
   int curr_term;
@@ -276,8 +273,8 @@ class Raft {
   struct timeval last_broadcast_time_;
 
   //用作与kvRaft交互
-  Semaphore m_recvSem;  //结合kvServer层的有名管道fifo模拟go的select及channel
-  Semaphore m_sendSem;  //结合kvServer层的有名管道fifo模拟go的select及channel
+  Semaphore recv_sem_;  //结合kvServer层的有名管道fifo模拟go的select及channel
+  Semaphore send_sem_;  //结合kvServer层的有名管道fifo模拟go的select及channel
   std::vector<ApplyMsg>
       msgs_;  //在applyLogLoop中存msg的容易，每次存一条，处理完再存一条
 
@@ -337,13 +334,12 @@ void Raft::Make(std::vector<PeersInfo> peers, int id) {
   std::thread(&Raft::ApplyLogLoop, this).detach();
 
   // Using std::thread instead of pthread
-  //std::thread listen_thread1(&Raft::ListenForVote, this);
-  //listen_thread1.detach();
-  //std::thread listen_thread2(&Raft::ListenForAppend, this);
-  //listen_thread2.detach();
-  //std::thread listen_thread3(&Raft::ApplyLogLoop, this);
-  //listen_thread3.detach();
-
+  // std::thread listen_thread1(&Raft::ListenForVote, this);
+  // listen_thread1.detach();
+  // std::thread listen_thread2(&Raft::ListenForAppend, this);
+  // listen_thread2.detach();
+  // std::thread listen_thread3(&Raft::ApplyLogLoop, this);
+  // listen_thread3.detach();
 }
 
 void* Raft::ApplyLogLoop(void* arg) {
@@ -466,7 +462,7 @@ void* Raft::ElectionLoop(void* arg) {
         raft->curr_peer_id_ = 0;
 
         for (auto server : raft->peers_) {
-          if (server.peer_id_ == raft->peer_id_) continue;
+          if (server.peer_id == raft->peer_id_) continue;
           std::thread(&Raft::CallRequestVote, raft).detach();
         }
 
@@ -597,17 +593,18 @@ void* Raft::ProcessEntriesLoop(void* arg) {
     }
 
     ::gettimeofday(&raft->last_broadcast_time_, nullptr);
-    // printf("%d send AppendRetries at %d\n", raft->peer_id_, raft->curr_term_);
-    // raft->m_lock.unlock();
+    // printf("%d send AppendRetries at %d\n", raft->peer_id_,
+    // raft->curr_term_); raft->m_lock.unlock();
 
-    for (auto& server : raft->peers_) {  //TODO: 严重警告，此处不能加const，因为要修改
-      if (server.peer_id_ == raft->peer_id_) continue;
-      if (raft->next_index_[server.peer_id_] <=
+    for (auto& server :
+         raft->peers_) {  // TODO: 严重警告，此处不能加const，因为要修改
+      if (server.peer_id == raft->peer_id_) continue;
+      if (raft->next_index_[server.peer_id] <=
           raft->last_included_index_) {  //进入install分支的条件，日志落后于leader的快照
         printf(
             "%d send install rpc to %d, whose nextIdx is %d, but leader's "
             "lastincludeIdx is %d\n",
-            raft->peer_id_, server.peer_id_, raft->next_index_[server.peer_id_],
+            raft->peer_id_, server.peer_id, raft->next_index_[server.peer_id],
             raft->last_included_index_);
         server.is_install_flag = true;
         std::thread(&Raft::SendInstallSnapShot, raft).detach();
@@ -615,7 +612,7 @@ void* Raft::ProcessEntriesLoop(void* arg) {
         printf(
             "%d send append rpc to %d, whose nextIdx is %d, but leader's "
             "lastincludeIdx is %d\n",
-            raft->peer_id_, server.peer_id_, raft->next_index_[server.peer_id_],
+            raft->peer_id_, server.peer_id, raft->next_index_[server.peer_id],
             raft->last_included_index_);
         std::thread(&Raft::SendAppendEntries, raft).detach();
       }
@@ -634,7 +631,7 @@ void* Raft::SendInstallSnapShot(void* arg) {
   //     raft->peers_[i].is_install_flag ? 1 : 0);
   // }
   for (int i = 0; i < raft->peers_.size(); i++) {
-    if (raft->peers_[i].peer_id_ == raft->peer_id_) {
+    if (raft->peers_[i].peer_id == raft->peer_id_) {
       // printf("%d is leader, continue\n", i);
       continue;
     }
@@ -668,9 +665,9 @@ void* Raft::SendInstallSnapShot(void* arg) {
   args.leader_id = raft->peer_id_;
   args.term = raft->curr_term_;
   raft->ReadSnapShot();
-  args.snap_shot = raft->persister_.snap_shot;
+  args.snapshot = raft->persister_.snap_shot;
 
-  printf("in send install snap_shot is %s\n", args.snap_shot.c_str());
+  printf("in send install snap_shot is %s\n", args.snapshot.c_str());
 
   lock.unlock();
   // printf("%d send to %d's install port is %d\n", raft->peer_id_,
@@ -748,7 +745,7 @@ InstallSnapSHotReply Raft::InstallSnapShot(InstallSnapShotArgs args) {
 
   last_included_index_ = args.last_included_index;
   last_included_term_ = args.last_included_term;
-  persister_.snap_shot = args.snap_shot;
+  persister_.snap_shot = args.snapshot;
   printf("in raft stall rpc, snap_shot is %s\n", persister_.snap_shot.c_str());
   SaveRaftState();
   SaveSnapShot();
@@ -803,7 +800,7 @@ void* Raft::SendAppendEntries(void* arg) {
   // }
 
   for (int i = 0; i < raft->peers_.size(); i++) {
-    if (raft->peers_[i].peer_id_ == raft->peer_id_) continue;
+    if (raft->peers_[i].peer_id == raft->peer_id_) continue;
     if (raft->peers_[i].is_install_flag) continue;
     if (raft->is_exist_index_.count(i)) continue;
     clientPeerId = i;
@@ -833,7 +830,7 @@ void* Raft::SendAppendEntries(void* arg) {
   for (int i = raft->IdxToCompressLogPos(args.prev_log_index) + 1;
        i < raft->logs_.size(); i++) {
     args.send_logs += (raft->logs_[i].command_str + "," +
-                        std::to_string(raft->logs_[i].term) + ";");
+                       std::to_string(raft->logs_[i].term) + ";");
   }
 
   //用作自己调试可能，因为如果leader的m_prevLogIndex为0，follower的size必为0，自己调试直接赋日志给各个server看选举情况可能需要这段代码
@@ -883,8 +880,8 @@ void* Raft::SendAppendEntries(void* arg) {
     int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
     if (realMajorityMatchIndex > raft->commit_index_ &&
         (realMajorityMatchIndex <= raft->last_included_index_ ||
-         raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)]
-                 .term == raft->curr_term_)) {
+         raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)].term ==
+             raft->curr_term_)) {
       raft->commit_index_ = realMajorityMatchIndex;
     }
   }
@@ -991,10 +988,8 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
           logs_[IdxToCompressLogPos(args.prev_log_index)].term;
       for (int index = last_included_index_ + 1; index <= args.prev_log_index;
            index++) {
-        if (logs_[IdxToCompressLogPos(index)].term ==
-            reply.conflict_term) {
-          reply.conflict_index =
-              index;  //找到冲突term的第一个index,比索引要加1
+        if (logs_[IdxToCompressLogPos(index)].term == reply.conflict_term) {
+          reply.conflict_index = index;  //找到冲突term的第一个index,比索引要加1
           break;
         }
       }
@@ -1176,13 +1171,13 @@ void Raft::SaveRaftState() {
   Serialize();
 }
 
-void Raft::SetSendSem(int num) { m_sendSem.Init(num); }
-void Raft::SetRecvSem(int num) { m_recvSem.Init(num); }
+void Raft::SetSendSem(int num) { send_sem_.Init(num); }
+void Raft::SetRecvSem(int num) { recv_sem_.Init(num); }
 
-bool Raft::WaitSendSem() { return m_sendSem.Wait(); }
-bool Raft::WaitRecvSem() { return m_recvSem.Wait(); }
-bool Raft::PostSendSem() { return m_sendSem.Post(); }
-bool Raft::PostRecvSem() { return m_recvSem.Post(); }
+bool Raft::WaitSendSem() { return send_sem_.Wait(); }
+bool Raft::WaitRecvSem() { return recv_sem_.Wait(); }
+bool Raft::PostSendSem() { return send_sem_.Post(); }
+bool Raft::PostRecvSem() { return recv_sem_.Post(); }
 
 ApplyMsg Raft::GetBackMsg() { return msgs_.back(); }
 
@@ -1267,8 +1262,8 @@ void Raft::SaveSnapShot() {
     std::perror("::open");
     std::exit(-1);
   }
-  int len =
-      ::write(fd, persister_.snap_shot.c_str(), persister_.snap_shot.size() + 1);
+  int len = ::write(fd, persister_.snap_shot.c_str(),
+                    persister_.snap_shot.size() + 1);
   ::close(fd);
 }
 
@@ -1324,7 +1319,7 @@ int Raft::LastTerm() {
   return LastTerm;
 }
 
-#if 1 
+#if 1
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     printf("loss parameter of peersNum\n");
@@ -1338,7 +1333,7 @@ int main(int argc, char* argv[]) {
   std::srand((unsigned)std::time(nullptr));
   std::vector<PeersInfo> peers(peers_num);
   for (int i = 0; i < peers_num; i++) {
-    peers[i].peer_id_ = i;
+    peers[i].peer_id = i;
     peers[i].port.first = COMMOM_PORT + i;
     peers[i].port.second = COMMOM_PORT + i + peers.size();
     // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].peer_id_,
@@ -1378,4 +1373,6 @@ int main(int argc, char* argv[]) {
   while (1)
     ;
 }
-#endif
+#endif  //#if 0
+
+#endif  // RYAN_DS_KV_RAFT_RAFT_H_

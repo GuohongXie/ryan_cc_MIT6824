@@ -1,9 +1,9 @@
 #ifndef RYAN_DS_KV_RAFT_SEMAPHORE_H_
 #define RYAN_DS_KV_RAFT_SEMAPHORE_H_
 
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
-#include <chrono>
 
 class Semaphore {
  public:
@@ -29,14 +29,14 @@ class Semaphore {
 
   bool TimedWait(unsigned long milliseconds) {
     std::unique_lock<std::mutex> lock(mutex_);
-    if(condition_.wait_for(lock, std::chrono::milliseconds(milliseconds), [this](){ return count_ > 0; })) {
+    if (condition_.wait_for(lock, std::chrono::milliseconds(milliseconds),
+                            [this]() { return count_ > 0; })) {
       count_--;
       return true;
     } else {
       return false;
     }
   }
-
 
  private:
   std::mutex mutex_;

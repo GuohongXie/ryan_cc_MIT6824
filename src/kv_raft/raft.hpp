@@ -1,3 +1,6 @@
+#ifndef RYAN_DS_KV_RAFT_RAFT_H_
+#define RYAN_DS_KV_RAFT_RAFT_H_
+
 #include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -26,71 +29,67 @@ constexpr int HEART_BEART_PERIOD = 100000;
  */
 
 //新增的快照RPC需要传的参数，具体看论文section7关于日志压缩的内容
-class InstallSnapShotArgs {
- public:
+struct InstallSnapShotArgs {
   int term;
-  int leaderId;
-  int lastIncludedIndex;
-  int lastIncludedTerm;
-  std::string snapShot;
+  int leader_id;
+  int last_included_index;
+  int last_included_term;
+  std::string snapshot;
 
   friend Serializer& operator>>(Serializer& in, InstallSnapShotArgs& d) {
-    in >> d.term >> d.leaderId >> d.lastIncludedIndex >> d.lastIncludedTerm >>
-        d.snapShot;
+    in >> d.term >> d.leader_id >> d.last_included_index >>
+        d.last_included_term >> d.snapshot;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, InstallSnapShotArgs d) {
-    out << d.term << d.leaderId << d.lastIncludedIndex << d.lastIncludedTerm
-        << d.snapShot;
+    out << d.term << d.leader_id << d.last_included_index
+        << d.last_included_term << d.snapshot;
     return out;
   }
 };
 
-class InstallSnapSHotReply {
- public:
+struct InstallSnapSHotReply {
   int term;
 };
 
-class Operation {
- public:
-  std::string getCmd();
+struct Operation {
+  std::string GetCmd();
   std::string op;
   std::string key;
   std::string value;
-  int clientId;
-  int requestId;
+  int client_id;
+  int request_id;
   int term;
   int index;
 };
 
-std::string Operation::getCmd() {
-  std::string cmd = op + " " + key + " " + value + " " + std::to_string(clientId) + " " +
-               std::to_string(requestId);
+std::string Operation::GetCmd() {
+  std::string cmd = op + " " + key + " " + value + " " +
+                    std::to_string(client_id) + " " +
+                    std::to_string(request_id);
   return cmd;
 }
 
-class StartRet {
- public:
-  StartRet() : m_cmdIndex(-1), curr_term_(-1), isLeader(false) {}
-  int m_cmdIndex;
+struct StartRet {
+  StartRet() : cmd_index(-1), curr_term_(-1), is_leader(false) {}
+  int cmd_index;
   int curr_term_;
-  bool isLeader;
+  bool is_leader;
 };
 
-class ApplyMsg {
- public:
-  bool commandValid;
+struct ApplyMsg {
+  bool is_command_valid;
   std::string command;
-  int commandIndex;
-  int commandTerm;
-  Operation getOperation();
+  int command_index;
+  int command_term;
+  Operation GetOperation();
 
-  int lastIncludedIndex;
-  int lastIncludedTerm;
-  std::string snapShot;
+  int last_included_index;
+  int last_included_term;
+  std::string snap_shot;
 };
 
-Operation ApplyMsg::getOperation() {
+Operation ApplyMsg::GetOperation() {
   Operation operation;
   std::vector<std::string> str;
   std::string tmp;
@@ -108,81 +107,79 @@ Operation ApplyMsg::getOperation() {
   operation.op = str[0];
   operation.key = str[1];
   operation.value = str[2];
-  operation.clientId = std::atoi(str[3].c_str());
-  operation.requestId = std::atoi(str[4].c_str());
-  operation.term = commandTerm;
+  operation.client_id = std::atoi(str[3].c_str());
+  operation.request_id = std::atoi(str[4].c_str());
+  operation.term = command_term;
   return operation;
 }
 
-class PeersInfo {
- public:
-  std::pair<int, int> m_port;
-  int peer_id_;
-  bool isInstallFlag;
+struct PeersInfo {
+  std::pair<int, int> port;
+  int peer_id;
+  bool is_install_flag;
 };
 
-class LogEntry {
- public:
-  LogEntry(std::string cmd = "", int term = -1) : m_command(cmd), m_term(term) {}
-  std::string m_command;
-  int m_term;
+struct LogEntry {
+  LogEntry(std::string cmd = "", int term = -1)
+      : command_str(cmd), term(term) {}
+  std::string command_str;
+  int term;
 };
 
-class Persister {
- public:
+struct Persister {
   std::vector<LogEntry> logs;
-  std::string snapShot;
-  int cur_term;
-  int votedFor;
-  int lastIncludedIndex;
-  int lastIncludedTerm;
+  std::string snap_shot;
+  int curr_term;
+  int voted_for;
+  int last_included_index;
+  int last_included_term;
 };
 
 class AppendEntriesArgs {
  public:
-  // AppendEntriesArgs():m_term(-1), leader_id_(-1), m_prevLogIndex(-1),
-  // m_prevLogTerm(-1){
-  //     //m_leaderCommit = 0;
-  //     m_sendLogs.clear();
+  // AppendEntriesArgs():term(-1), leader_id_(-1), prev_log_index(-1),
+  // prev_log_term(-1){
+  //     //leader_commit = 0;
+  //     send_logs.clear();
   // }
-  int m_term;
+  int term;
   int leader_id_;
-  int m_prevLogIndex;
-  int m_prevLogTerm;
-  int m_leaderCommit;
-  std::string m_sendLogs;
+  int prev_log_index;
+  int prev_log_term;
+  int leader_commit;
+  std::string send_logs;
   friend Serializer& operator>>(Serializer& in, AppendEntriesArgs& d) {
-    in >> d.m_term >> d.leader_id_ >> d.m_prevLogIndex >> d.m_prevLogTerm >>
-        d.m_leaderCommit >> d.m_sendLogs;
+    in >> d.term >> d.leader_id_ >> d.prev_log_index >> d.prev_log_term >>
+        d.leader_commit >> d.send_logs;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, AppendEntriesArgs d) {
-    out << d.m_term << d.leader_id_ << d.m_prevLogIndex << d.m_prevLogTerm
-        << d.m_leaderCommit << d.m_sendLogs;
+    out << d.term << d.leader_id_ << d.prev_log_index << d.prev_log_term
+        << d.leader_commit << d.send_logs;
     return out;
   }
 };
 
 class AppendEntriesReply {
  public:
-  int m_term;
-  bool m_success;
-  int m_conflict_term;
-  int m_conflict_index;
+  int term;
+  bool success;
+  int conflict_term;
+  int conflict_index;
 };
 
 class RequestVoteArgs {
  public:
   int term;
-  int candidateId;
-  int lastLogTerm;
-  int lastLogIndex;
+  int candidate_id;
+  int last_log_term;
+  int last_log_index;
 };
 
 class RequestVoteReply {
  public:
   int term;
-  bool VoteGranted;
+  bool vote_granted;
 };
 
 class Raft {
@@ -233,8 +230,8 @@ class Raft {
   bool ExceedLogSize(
       int size);  //超出日志大小则需要快照，kvServer层需要有个守护线程持续调用该函数判断
   void RecvSnapShot(
-      std::string snapShot,
-      int lastIncludedIndex);  //接受来自kvServer层的快照，用于持久化
+      std::string snap_shot,
+      int last_included_index);  //接受来自kvServer层的快照，用于持久化
   int IdxToCompressLogPos(int index);  //获得原先索引在截断日志后的索引
   bool ReadSnapShot();                 //读取快照
   void SaveSnapShot();                 //持久化快照
@@ -276,8 +273,8 @@ class Raft {
   struct timeval last_broadcast_time_;
 
   //用作与kvRaft交互
-  Semaphore m_recvSem;  //结合kvServer层的有名管道fifo模拟go的select及channel
-  Semaphore m_sendSem;  //结合kvServer层的有名管道fifo模拟go的select及channel
+  Semaphore recv_sem_;  //结合kvServer层的有名管道fifo模拟go的select及channel
+  Semaphore send_sem_;  //结合kvServer层的有名管道fifo模拟go的select及channel
   std::vector<ApplyMsg>
       msgs_;  //在applyLogLoop中存msg的容易，每次存一条，处理完再存一条
 
@@ -302,8 +299,8 @@ void Raft::Make(std::vector<PeersInfo> peers, int id) {
 
   // for(int i = 0; i < id + 1; i++){
   //     LogEntry log;
-  //     log.m_command = std::to_string(i);
-  //     log.m_term = i;
+  //     log.command_str = std::to_string(i);
+  //     log.term = i;
   //     logs_.push_back(log);
   // }
 
@@ -337,13 +334,12 @@ void Raft::Make(std::vector<PeersInfo> peers, int id) {
   std::thread(&Raft::ApplyLogLoop, this).detach();
 
   // Using std::thread instead of pthread
-  //std::thread listen_thread1(&Raft::ListenForVote, this);
-  //listen_thread1.detach();
-  //std::thread listen_thread2(&Raft::ListenForAppend, this);
-  //listen_thread2.detach();
-  //std::thread listen_thread3(&Raft::ApplyLogLoop, this);
-  //listen_thread3.detach();
-
+  // std::thread listen_thread1(&Raft::ListenForVote, this);
+  // listen_thread1.detach();
+  // std::thread listen_thread2(&Raft::ListenForAppend, this);
+  // listen_thread2.detach();
+  // std::thread listen_thread3(&Raft::ApplyLogLoop, this);
+  // listen_thread3.detach();
 }
 
 void* Raft::ApplyLogLoop(void* arg) {
@@ -369,10 +365,10 @@ void* Raft::ApplyLogLoop(void* arg) {
         raft->last_applied_++;
         int appliedIdx = raft->IdxToCompressLogPos(raft->last_applied_);
         ApplyMsg msg;
-        msg.command = raft->logs_[appliedIdx].m_command;
-        msg.commandValid = true;
-        msg.commandTerm = raft->logs_[appliedIdx].m_term;
-        msg.commandIndex = raft->last_applied_;
+        msg.command = raft->logs_[appliedIdx].command_str;
+        msg.is_command_valid = true;
+        msg.command_term = raft->logs_[appliedIdx].term;
+        msg.command_index = raft->last_applied_;
         msgs.push_back(msg);
       }
       lock.unlock();
@@ -416,7 +412,7 @@ void Raft::SetBroadcastTime() {
 void* Raft::ListenForVote(void* arg) {
   Raft* raft = static_cast<Raft*>(arg);
   buttonrpc server;
-  server.as_server(raft->peers_[raft->peer_id_].m_port.first);
+  server.as_server(raft->peers_[raft->peer_id_].port.first);
   server.bind("RequestVote", &Raft::RequestVote, raft);
 
   std::thread(&Raft::ElectionLoop, raft).detach();
@@ -428,7 +424,7 @@ void* Raft::ListenForVote(void* arg) {
 void* Raft::ListenForAppend(void* arg) {
   Raft* raft = static_cast<Raft*>(arg);
   buttonrpc server;
-  server.as_server(raft->peers_[raft->peer_id_].m_port.second);
+  server.as_server(raft->peers_[raft->peer_id_].port.second);
   server.bind("AppendEntries", &Raft::AppendEntries, raft);
   server.bind("InstallSnapShot", &Raft::InstallSnapShot, raft);
 
@@ -466,7 +462,7 @@ void* Raft::ElectionLoop(void* arg) {
         raft->curr_peer_id_ = 0;
 
         for (auto server : raft->peers_) {
-          if (server.peer_id_ == raft->peer_id_) continue;
+          if (server.peer_id == raft->peer_id_) continue;
           std::thread(&Raft::CallRequestVote, raft).detach();
         }
 
@@ -504,15 +500,15 @@ void* Raft::CallRequestVote(void* arg) {
   buttonrpc client;
   std::unique_lock<std::mutex> lock(raft->mutex_);
   RequestVoteArgs args;
-  args.candidateId = raft->peer_id_;
+  args.candidate_id = raft->peer_id_;
   args.term = raft->curr_term_;
-  args.lastLogIndex = raft->LastIndex();
-  args.lastLogTerm = raft->LastTerm();
+  args.last_log_index = raft->LastIndex();
+  args.last_log_term = raft->LastTerm();
   if (raft->curr_peer_id_ == raft->peer_id_) {
     raft->curr_peer_id_++;
   }
   int clientPeerId = raft->curr_peer_id_;
-  client.as_client("127.0.0.1", raft->peers_[raft->curr_peer_id_++].m_port.first);
+  client.as_client("127.0.0.1", raft->peers_[raft->curr_peer_id_++].port.first);
 
   if (raft->curr_peer_id_ == raft->peers_.size() ||
       (raft->curr_peer_id_ == raft->peers_.size() - 1 &&
@@ -533,7 +529,7 @@ void* Raft::CallRequestVote(void* arg) {
     raft->ReadRaftState();
     return nullptr;
   }
-  if (reply.VoteGranted) {
+  if (reply.vote_granted) {
     raft->recv_votes_++;
   }
 }
@@ -551,7 +547,7 @@ bool Raft::CheckLogUptodate(int term, int index) {
 
 RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
   RequestVoteReply reply;
-  reply.VoteGranted = false;
+  reply.vote_granted = false;
   std::unique_lock<std::mutex> lock(mutex_);
   reply.term = curr_term_;
 
@@ -565,15 +561,15 @@ RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
     voted_for_ = -1;
   }
 
-  if (voted_for_ == -1 || voted_for_ == args.candidateId) {
-    bool ret = CheckLogUptodate(args.lastLogTerm, args.lastLogIndex);
+  if (voted_for_ == -1 || voted_for_ == args.candidate_id) {
+    bool ret = CheckLogUptodate(args.last_log_term, args.last_log_index);
     if (!ret) {
       return reply;
     }
-    voted_for_ = args.candidateId;
-    reply.VoteGranted = true;
+    voted_for_ = args.candidate_id;
+    reply.vote_granted = true;
     printf("[%d] vote to [%d] at %d, duration is %d\n", peer_id_,
-           args.candidateId, curr_term_, GetMyduration(last_wake_time_));
+           args.candidate_id, curr_term_, GetMyduration(last_wake_time_));
     ::gettimeofday(&last_wake_time_, nullptr);
   }
   SaveRaftState();
@@ -597,25 +593,26 @@ void* Raft::ProcessEntriesLoop(void* arg) {
     }
 
     ::gettimeofday(&raft->last_broadcast_time_, nullptr);
-    // printf("%d send AppendRetries at %d\n", raft->peer_id_, raft->curr_term_);
-    // raft->m_lock.unlock();
+    // printf("%d send AppendRetries at %d\n", raft->peer_id_,
+    // raft->curr_term_); raft->m_lock.unlock();
 
-    for (auto& server : raft->peers_) {  //TODO: 严重警告，此处不能加const，因为要修改
-      if (server.peer_id_ == raft->peer_id_) continue;
-      if (raft->next_index_[server.peer_id_] <=
+    for (auto& server :
+         raft->peers_) {  // TODO: 严重警告，此处不能加const，因为要修改
+      if (server.peer_id == raft->peer_id_) continue;
+      if (raft->next_index_[server.peer_id] <=
           raft->last_included_index_) {  //进入install分支的条件，日志落后于leader的快照
         printf(
             "%d send install rpc to %d, whose nextIdx is %d, but leader's "
             "lastincludeIdx is %d\n",
-            raft->peer_id_, server.peer_id_, raft->next_index_[server.peer_id_],
+            raft->peer_id_, server.peer_id, raft->next_index_[server.peer_id],
             raft->last_included_index_);
-        server.isInstallFlag = true;
+        server.is_install_flag = true;
         std::thread(&Raft::SendInstallSnapShot, raft).detach();
       } else {
         printf(
             "%d send append rpc to %d, whose nextIdx is %d, but leader's "
             "lastincludeIdx is %d\n",
-            raft->peer_id_, server.peer_id_, raft->next_index_[server.peer_id_],
+            raft->peer_id_, server.peer_id, raft->next_index_[server.peer_id],
             raft->last_included_index_);
         std::thread(&Raft::SendAppendEntries, raft).detach();
       }
@@ -630,15 +627,15 @@ void* Raft::SendInstallSnapShot(void* arg) {
   int clientPeerId;
   std::unique_lock<std::mutex> lock(raft->mutex_);
   // for(int i = 0; i < raft->peers_.size(); i++){
-  //     printf("in install %d's server.isInstallFlag is %d\n", i,
-  //     raft->peers_[i].isInstallFlag ? 1 : 0);
+  //     printf("in install %d's server.is_install_flag is %d\n", i,
+  //     raft->peers_[i].is_install_flag ? 1 : 0);
   // }
   for (int i = 0; i < raft->peers_.size(); i++) {
-    if (raft->peers_[i].peer_id_ == raft->peer_id_) {
+    if (raft->peers_[i].peer_id == raft->peer_id_) {
       // printf("%d is leader, continue\n", i);
       continue;
     }
-    if (!raft->peers_[i].isInstallFlag) {
+    if (!raft->peers_[i].is_install_flag) {
       // printf("%d is append, continue\n", i);
       continue;
     }
@@ -653,28 +650,28 @@ void* Raft::SendInstallSnapShot(void* arg) {
     break;
   }
 
-  client.as_client("127.0.0.1", raft->peers_[clientPeerId].m_port.second);
+  client.as_client("127.0.0.1", raft->peers_[clientPeerId].port.second);
 
   if (raft->is_exist_index_.size() == raft->peers_.size() - 1) {
     // printf("install clear size is %d\n", raft->is_exist_index_.size());
     for (int i = 0; i < raft->peers_.size(); i++) {
-      raft->peers_[i].isInstallFlag = false;
+      raft->peers_[i].is_install_flag = false;
     }
     raft->is_exist_index_.clear();
   }
 
-  args.lastIncludedIndex = raft->last_included_index_;
-  args.lastIncludedTerm = raft->last_included_term_;
-  args.leaderId = raft->peer_id_;
+  args.last_included_index = raft->last_included_index_;
+  args.last_included_term = raft->last_included_term_;
+  args.leader_id = raft->peer_id_;
   args.term = raft->curr_term_;
   raft->ReadSnapShot();
-  args.snapShot = raft->persister_.snapShot;
+  args.snapshot = raft->persister_.snap_shot;
 
-  printf("in send install snapShot is %s\n", args.snapShot.c_str());
+  printf("in send install snap_shot is %s\n", args.snapshot.c_str());
 
   lock.unlock();
   // printf("%d send to %d's install port is %d\n", raft->peer_id_,
-  // clientPeerId, raft->peers_[clientPeerId].m_port.second);
+  // clientPeerId, raft->peers_[clientPeerId].port.second);
   InstallSnapSHotReply reply =
       client.call<InstallSnapSHotReply>("InstallSnapShot", args).val();
   // printf("%d is called send install to %d\n", raft->peer_id_, clientPeerId);
@@ -693,7 +690,7 @@ void* Raft::SendInstallSnapShot(void* arg) {
   }
 
   raft->next_index_[clientPeerId] = raft->LastIndex() + 1;
-  raft->match_index_[clientPeerId] = args.lastIncludedIndex;
+  raft->match_index_[clientPeerId] = args.last_included_index;
 
   raft->match_index_[raft->peer_id_] = raft->LastIndex();
   std::vector<int> tmpIndex = raft->match_index_;
@@ -701,7 +698,7 @@ void* Raft::SendInstallSnapShot(void* arg) {
   int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
   if (realMajorityMatchIndex > raft->commit_index_ &&
       (realMajorityMatchIndex <= raft->last_included_index_ ||
-       raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)].m_term ==
+       raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)].term ==
            raft->curr_term_)) {
     raft->commit_index_ = realMajorityMatchIndex;
   }
@@ -727,17 +724,17 @@ InstallSnapSHotReply Raft::InstallSnapShot(InstallSnapShotArgs args) {
   ::gettimeofday(&last_wake_time_, nullptr);
 
   printf("in stall rpc, args.last is %d, but selfLast is %d, size is %d\n",
-         args.lastIncludedIndex, last_included_index_, LastIndex());
-  if (args.lastIncludedIndex <= last_included_index_) {
+         args.last_included_index, last_included_index_, LastIndex());
+  if (args.last_included_index <= last_included_index_) {
     return reply;
   } else {
-    if (args.lastIncludedIndex < LastIndex()) {
-      if (logs_[IdxToCompressLogPos(LastIndex())].m_term !=
-          args.lastIncludedTerm) {
+    if (args.last_included_index < LastIndex()) {
+      if (logs_[IdxToCompressLogPos(LastIndex())].term !=
+          args.last_included_term) {
         logs_.clear();
       } else {
         std::vector<LogEntry> tmpLog(
-            logs_.begin() + IdxToCompressLogPos(args.lastIncludedIndex) + 1,
+            logs_.begin() + IdxToCompressLogPos(args.last_included_index) + 1,
             logs_.end());
         logs_ = tmpLog;
       }
@@ -746,10 +743,10 @@ InstallSnapSHotReply Raft::InstallSnapShot(InstallSnapShotArgs args) {
     }
   }
 
-  last_included_index_ = args.lastIncludedIndex;
-  last_included_term_ = args.lastIncludedTerm;
-  persister_.snapShot = args.snapShot;
-  printf("in raft stall rpc, snapShot is %s\n", persister_.snapShot.c_str());
+  last_included_index_ = args.last_included_index;
+  last_included_term_ = args.last_included_term;
+  persister_.snap_shot = args.snapshot;
+  printf("in raft stall rpc, snap_shot is %s\n", persister_.snap_shot.c_str());
   SaveRaftState();
   SaveSnapShot();
 
@@ -798,13 +795,13 @@ void* Raft::SendAppendEntries(void* arg) {
   std::unique_lock<std::mutex> lock(raft->mutex_);
 
   // for(int i = 0; i < raft->peers_.size(); i++){
-  //     printf("in append %d's server.isInstallFlag is %d\n", i,
-  //     raft->peers_[i].isInstallFlag ? 1 : 0);
+  //     printf("in append %d's server.is_install_flag is %d\n", i,
+  //     raft->peers_[i].is_install_flag ? 1 : 0);
   // }
 
   for (int i = 0; i < raft->peers_.size(); i++) {
-    if (raft->peers_[i].peer_id_ == raft->peer_id_) continue;
-    if (raft->peers_[i].isInstallFlag) continue;
+    if (raft->peers_[i].peer_id == raft->peer_id_) continue;
+    if (raft->peers_[i].is_install_flag) continue;
     if (raft->is_exist_index_.count(i)) continue;
     clientPeerId = i;
     raft->is_exist_index_.insert(i);
@@ -813,66 +810,66 @@ void* Raft::SendAppendEntries(void* arg) {
     break;
   }
 
-  client.as_client("127.0.0.1", raft->peers_[clientPeerId].m_port.second);
+  client.as_client("127.0.0.1", raft->peers_[clientPeerId].port.second);
   // printf("%d send to %d's append port is %d\n", raft->peer_id_, clientPeerId,
-  // raft->peers_[clientPeerId].m_port.second);
+  // raft->peers_[clientPeerId].port.second);
 
   if (raft->is_exist_index_.size() == raft->peers_.size() - 1) {
     // printf("append clear size is %d\n", raft->is_exist_index_.size());
     for (int i = 0; i < raft->peers_.size(); i++) {
-      raft->peers_[i].isInstallFlag = false;
+      raft->peers_[i].is_install_flag = false;
     }
     raft->is_exist_index_.clear();
   }
 
-  args.m_term = raft->curr_term_;
+  args.term = raft->curr_term_;
   args.leader_id_ = raft->peer_id_;
-  args.m_prevLogIndex = raft->next_index_[clientPeerId] - 1;
-  args.m_leaderCommit = raft->commit_index_;
+  args.prev_log_index = raft->next_index_[clientPeerId] - 1;
+  args.leader_commit = raft->commit_index_;
 
-  for (int i = raft->IdxToCompressLogPos(args.m_prevLogIndex) + 1;
+  for (int i = raft->IdxToCompressLogPos(args.prev_log_index) + 1;
        i < raft->logs_.size(); i++) {
-    args.m_sendLogs += (raft->logs_[i].m_command + "," +
-                        std::to_string(raft->logs_[i].m_term) + ";");
+    args.send_logs += (raft->logs_[i].command_str + "," +
+                       std::to_string(raft->logs_[i].term) + ";");
   }
 
   //用作自己调试可能，因为如果leader的m_prevLogIndex为0，follower的size必为0，自己调试直接赋日志给各个server看选举情况可能需要这段代码
-  // if(args.m_prevLogIndex == 0){
-  //     args.m_prevLogTerm = 0;
+  // if(args.prev_log_index == 0){
+  //     args.prev_log_term = 0;
   //     if(raft->logs_.size() != 0){
-  //         args.m_prevLogTerm = raft->logs_[0].m_term;
+  //         args.prev_log_term = raft->logs_[0].term;
   //     }
   // }
 
-  if (args.m_prevLogIndex == raft->last_included_index_) {
-    args.m_prevLogTerm = raft->last_included_term_;
+  if (args.prev_log_index == raft->last_included_index_) {
+    args.prev_log_term = raft->last_included_term_;
   } else {  //有快照的话m_prevLogIndex必然不为0
-    args.m_prevLogTerm =
-        raft->logs_[raft->IdxToCompressLogPos(args.m_prevLogIndex)].m_term;
+    args.prev_log_term =
+        raft->logs_[raft->IdxToCompressLogPos(args.prev_log_index)].term;
   }
 
   // printf("[%d] -> [%d]'s prevLogIndex : %d, prevLogTerm : %d\n",
-  // raft->peer_id_, clientPeerId, args.m_prevLogIndex, args.m_prevLogTerm);
+  // raft->peer_id_, clientPeerId, args.prev_log_index, args.prev_log_term);
 
   lock.unlock();
   AppendEntriesReply reply =
       client.call<AppendEntriesReply>("AppendEntries", args).val();
 
   lock.lock();
-  if (raft->curr_term_ != args.m_term) {
+  if (raft->curr_term_ != args.term) {
     return nullptr;
   }
-  if (reply.m_term > raft->curr_term_) {
+  if (reply.term > raft->curr_term_) {
     raft->state_ = FOLLOWER;
-    raft->curr_term_ = reply.m_term;
+    raft->curr_term_ = reply.term;
     raft->voted_for_ = -1;
     raft->SaveRaftState();
     return nullptr;  // FOLLOWER没必要维护nextIndex,成为leader会更新
   }
 
-  if (reply.m_success) {
+  if (reply.success) {
     raft->next_index_[clientPeerId] =
-        args.m_prevLogIndex + raft->GetCmdAndTerm(args.m_sendLogs).size() +
+        args.prev_log_index + raft->GetCmdAndTerm(args.send_logs).size() +
         1;  //可能RPC调用完log又增加了，但那些是不应该算进去的，不能直接取m_logs.size()
             //+ 1
     raft->match_index_[clientPeerId] = raft->next_index_[clientPeerId] - 1;
@@ -883,19 +880,19 @@ void* Raft::SendAppendEntries(void* arg) {
     int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
     if (realMajorityMatchIndex > raft->commit_index_ &&
         (realMajorityMatchIndex <= raft->last_included_index_ ||
-         raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)]
-                 .m_term == raft->curr_term_)) {
+         raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)].term ==
+             raft->curr_term_)) {
       raft->commit_index_ = realMajorityMatchIndex;
     }
   }
 
-  if (!reply.m_success) {
-    if (reply.m_conflict_term != -1 && reply.m_conflict_term != -100) {
+  if (!reply.success) {
+    if (reply.conflict_term != -1 && reply.conflict_term != -100) {
       int leader_conflict_index = -1;
-      for (int index = args.m_prevLogIndex; index > raft->last_included_index_;
+      for (int index = args.prev_log_index; index > raft->last_included_index_;
            index--) {
-        if (raft->logs_[raft->IdxToCompressLogPos(index)].m_term ==
-            reply.m_conflict_term) {
+        if (raft->logs_[raft->IdxToCompressLogPos(index)].term ==
+            reply.conflict_term) {
           leader_conflict_index = index;
           break;
         }
@@ -905,107 +902,105 @@ void* Raft::SendAppendEntries(void* arg) {
       } else {
         raft->next_index_[clientPeerId] =
             reply
-                .m_conflict_index;  //这里加不加1都可，无非是多一位还是少一位，此处指follower对应index为空
+                .conflict_index;  //这里加不加1都可，无非是多一位还是少一位，此处指follower对应index为空
       }
     } else {
-      if (reply.m_conflict_term == -100) {
+      if (reply.conflict_term == -100) {
       }
       //-------------------很关键，运行时不能注释下面这段，因为我自己调试bug强行增加bug，没有专门的测试程序-----------------
       else
-        raft->next_index_[clientPeerId] = reply.m_conflict_index;
+        raft->next_index_[clientPeerId] = reply.conflict_index;
     }
   }
   raft->SaveRaftState();
 }
 
 AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
-  std::vector<LogEntry> recvLog = GetCmdAndTerm(args.m_sendLogs);
+  std::vector<LogEntry> recvLog = GetCmdAndTerm(args.send_logs);
   AppendEntriesReply reply;
   std::unique_lock<std::mutex> lock(mutex_);
-  reply.m_term = curr_term_;
-  reply.m_success = false;
-  reply.m_conflict_index = -1;
-  reply.m_conflict_term = -1;
+  reply.term = curr_term_;
+  reply.success = false;
+  reply.conflict_index = -1;
+  reply.conflict_term = -1;
 
-  if (args.m_term < curr_term_) {
+  if (args.term < curr_term_) {
     return reply;
   }
 
-  if (args.m_term >= curr_term_) {
-    if (args.m_term > curr_term_) {
+  if (args.term >= curr_term_) {
+    if (args.term > curr_term_) {
       voted_for_ = -1;
       SaveRaftState();
     }
-    curr_term_ = args.m_term;
+    curr_term_ = args.term;
     state_ = FOLLOWER;
   }
   // printf("[%d] recv append from [%d] at self term%d, send term %d, duration
   // is %d\n",
-  //         peer_id_, args.leader_id_, curr_term_, args.m_term,
+  //         peer_id_, args.leader_id_, curr_term_, args.term,
   //         GetMyduration(last_wake_time_));
   ::gettimeofday(&last_wake_time_, nullptr);
 
   //------------------------------------test----------------------------------
   if (dead_) {
-    reply.m_conflict_term = -100;
+    reply.conflict_term = -100;
     return reply;
   }
   //------------------------------------test----------------------------------
 
-  if (args.m_prevLogIndex < last_included_index_) {
-    printf("[%d]'s last_included_index_ is %d, but args.m_prevLogIndex is %d\n",
-           peer_id_, last_included_index_, args.m_prevLogIndex);
-    reply.m_conflict_index = 1;
+  if (args.prev_log_index < last_included_index_) {
+    printf("[%d]'s last_included_index_ is %d, but args.prev_log_index is %d\n",
+           peer_id_, last_included_index_, args.prev_log_index);
+    reply.conflict_index = 1;
     return reply;
-  } else if (args.m_prevLogIndex == last_included_index_) {
-    printf("[%d]'s last_included_term_ is %d, args.m_prevLogTerm is %d\n",
-           peer_id_, last_included_term_, args.m_prevLogTerm);
-    if (args.m_prevLogTerm !=
+  } else if (args.prev_log_index == last_included_index_) {
+    printf("[%d]'s last_included_term_ is %d, args.prev_log_term is %d\n",
+           peer_id_, last_included_term_, args.prev_log_term);
+    if (args.prev_log_term !=
         last_included_term_) {  //脑裂分区，少数派的snapShot不对，回归集群后需要更新自己的snapShot及log
-      reply.m_conflict_index = 1;
+      reply.conflict_index = 1;
       return reply;
     }
   } else {
-    if (LastIndex() < args.m_prevLogIndex) {
+    if (LastIndex() < args.prev_log_index) {
       //索引要加1,很关键，避免快照安装一直循环(知道下次快照)，这里加不加1最多影响到回滚次数多一次还是少一次
       //如果不加1，先dead在activate，那么log的size一直都是lastincludedindx，next
       //= conflict = last一直循环， 知道下次超过maxstate，kvserver发起新快照才行
-      reply.m_conflict_index = LastIndex() + 1;
+      reply.conflict_index = LastIndex() + 1;
       printf(
           " [%d]'s logs.size : %d < [%d]'s prevLogIdx : %d, ret conflict idx "
           "is %d\n",
-          peer_id_, LastIndex(), args.leader_id_, args.m_prevLogIndex,
-          reply.m_conflict_index);
+          peer_id_, LastIndex(), args.leader_id_, args.prev_log_index,
+          reply.conflict_index);
       lock.unlock();
-      reply.m_success = false;
+      reply.success = false;
       return reply;
     }
     //走到这里必然有日志，且prevLogIndex > 0
-    if (logs_[IdxToCompressLogPos(args.m_prevLogIndex)].m_term !=
-        args.m_prevLogTerm) {
+    if (logs_[IdxToCompressLogPos(args.prev_log_index)].term !=
+        args.prev_log_term) {
       printf(" [%d]'s prevLogterm : %d != [%d]'s prevLogTerm : %d\n", peer_id_,
-             logs_[IdxToCompressLogPos(args.m_prevLogIndex)].m_term,
-             args.leader_id_, args.m_prevLogTerm);
+             logs_[IdxToCompressLogPos(args.prev_log_index)].term,
+             args.leader_id_, args.prev_log_term);
 
-      reply.m_conflict_term =
-          logs_[IdxToCompressLogPos(args.m_prevLogIndex)].m_term;
-      for (int index = last_included_index_ + 1; index <= args.m_prevLogIndex;
+      reply.conflict_term =
+          logs_[IdxToCompressLogPos(args.prev_log_index)].term;
+      for (int index = last_included_index_ + 1; index <= args.prev_log_index;
            index++) {
-        if (logs_[IdxToCompressLogPos(index)].m_term ==
-            reply.m_conflict_term) {
-          reply.m_conflict_index =
-              index;  //找到冲突term的第一个index,比索引要加1
+        if (logs_[IdxToCompressLogPos(index)].term == reply.conflict_term) {
+          reply.conflict_index = index;  //找到冲突term的第一个index,比索引要加1
           break;
         }
       }
       lock.unlock();
-      reply.m_success = false;
+      reply.success = false;
       return reply;
     }
   }
   //走到这里必然PrevLogterm与对应follower的index处term相等，进行日志覆盖
   int logSize = LastIndex();
-  for (int i = args.m_prevLogIndex; i < logSize; i++) {
+  for (int i = args.prev_log_index; i < logSize; i++) {
     logs_.pop_back();
   }
   // logs_.insert(logs_.end(), recvLog.begin(), recvLog.end());
@@ -1013,14 +1008,14 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
     PushBackLog(log);
   }
   SaveRaftState();
-  if (commit_index_ < args.m_leaderCommit) {
-    commit_index_ = min(args.m_leaderCommit, LastIndex());
-    // commit_index_ = args.m_leaderCommit;
+  if (commit_index_ < args.leader_commit) {
+    commit_index_ = min(args.leader_commit, LastIndex());
+    // commit_index_ = args.leader_commit;
   }
-  // for(auto a : logs_) printf("%d ", a.m_term);
+  // for(auto a : logs_) printf("%d ", a.term);
   // printf(" [%d] sync success\n", peer_id_);
   lock.unlock();
-  reply.m_success = true;
+  reply.success = true;
   return reply;
 }
 
@@ -1046,40 +1041,40 @@ StartRet Raft::Start(Operation op) {
   std::unique_lock<std::mutex> lock(mutex_);
   RAFT_STATE state = state_;
   if (state != LEADER) {
-    // printf("index : %d, term : %d, isleader : %d\n", ret.m_cmdIndex,
-    // ret.curr_term_, ret.isLeader == false ? 0 : 1);
+    // printf("index : %d, term : %d, isleader : %d\n", ret.cmd_index,
+    // ret.curr_term_, ret.is_leader == false ? 0 : 1);
     return ret;
   }
 
   LogEntry log;
-  log.m_command = op.getCmd();
-  log.m_term = curr_term_;
+  log.command_str = op.GetCmd();
+  log.term = curr_term_;
   PushBackLog(log);
 
-  ret.m_cmdIndex = LastIndex();
+  ret.cmd_index = LastIndex();
   ret.curr_term_ = curr_term_;
-  ret.isLeader = true;
-  // printf("index : %d, term : %d, isleader : %d\n", ret.m_cmdIndex,
-  // ret.curr_term_, ret.isLeader == false ? 0 : 1);
+  ret.is_leader = true;
+  // printf("index : %d, term : %d, isleader : %d\n", ret.cmd_index,
+  // ret.curr_term_, ret.is_leader == false ? 0 : 1);
 
   return ret;
 }
 
 void Raft::PrintLogs() {
   for (const auto& a : logs_) {
-    printf("logs : %d\n", a.m_term);
+    printf("logs : %d\n", a.term);
   }
   cout << endl;
 }
 
 void Raft::Serialize() {
   std::string str;
-  str += std::to_string(this->persister_.cur_term) + ";" +
-         std::to_string(this->persister_.votedFor) + ";";
-  str += std::to_string(this->persister_.lastIncludedIndex) + ";" +
-         std::to_string(this->persister_.lastIncludedTerm) + ";";
+  str += std::to_string(this->persister_.curr_term) + ";" +
+         std::to_string(this->persister_.voted_for) + ";";
+  str += std::to_string(this->persister_.last_included_index) + ";" +
+         std::to_string(this->persister_.last_included_term) + ";";
   for (const auto& log : this->persister_.logs) {
-    str += log.m_command + "," + std::to_string(log.m_term) + ".";
+    str += log.command_str + "," + std::to_string(log.term) + ".";
   }
   std::string filename = "persister_-" + std::to_string(peer_id_);
   int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT, 0664);
@@ -1121,10 +1116,10 @@ bool Raft::Deserialize() {
     }
   }
   persist.push_back(tmp);
-  this->persister_.cur_term = std::atoi(persist[0].c_str());
-  this->persister_.votedFor = std::atoi(persist[1].c_str());
-  this->persister_.lastIncludedIndex = std::atoi(persist[2].c_str());
-  this->persister_.lastIncludedTerm = std::atoi(persist[3].c_str());
+  this->persister_.curr_term = std::atoi(persist[0].c_str());
+  this->persister_.voted_for = std::atoi(persist[1].c_str());
+  this->persister_.last_included_index = std::atoi(persist[2].c_str());
+  this->persister_.last_included_term = std::atoi(persist[3].c_str());
   std::vector<std::string> log;
   std::vector<LogEntry> logs;
   tmp = "";
@@ -1157,8 +1152,8 @@ void Raft::ReadRaftState() {
   //只在初始化的时候调用，没必要加锁，因为run()在其之后才执行
   bool ret = this->Deserialize();
   if (!ret) return;
-  this->curr_term_ = this->persister_.cur_term;
-  this->voted_for_ = this->persister_.votedFor;
+  this->curr_term_ = this->persister_.curr_term;
+  this->voted_for_ = this->persister_.voted_for;
 
   for (const auto& log : this->persister_.logs) {
     PushBackLog(log);
@@ -1168,21 +1163,21 @@ void Raft::ReadRaftState() {
 }
 
 void Raft::SaveRaftState() {
-  persister_.cur_term = curr_term_;
-  persister_.votedFor = voted_for_;
+  persister_.curr_term = curr_term_;
+  persister_.voted_for = voted_for_;
   persister_.logs = logs_;
-  persister_.lastIncludedIndex = this->last_included_index_;
-  persister_.lastIncludedTerm = this->last_included_term_;
+  persister_.last_included_index = this->last_included_index_;
+  persister_.last_included_term = this->last_included_term_;
   Serialize();
 }
 
-void Raft::SetSendSem(int num) { m_sendSem.Init(num); }
-void Raft::SetRecvSem(int num) { m_recvSem.Init(num); }
+void Raft::SetSendSem(int num) { send_sem_.Init(num); }
+void Raft::SetRecvSem(int num) { recv_sem_.Init(num); }
 
-bool Raft::WaitSendSem() { return m_sendSem.Wait(); }
-bool Raft::WaitRecvSem() { return m_recvSem.Wait(); }
-bool Raft::PostSendSem() { return m_sendSem.Post(); }
-bool Raft::PostRecvSem() { return m_recvSem.Post(); }
+bool Raft::WaitSendSem() { return send_sem_.Wait(); }
+bool Raft::WaitRecvSem() { return recv_sem_.Wait(); }
+bool Raft::PostSendSem() { return send_sem_.Post(); }
+bool Raft::PostRecvSem() { return recv_sem_.Post(); }
 
 ApplyMsg Raft::GetBackMsg() { return msgs_.back(); }
 
@@ -1192,7 +1187,7 @@ bool Raft::ExceedLogSize(int size) {
   std::unique_lock<std::mutex> lock(mutex_);
   int sum = 8;
   for (int i = 0; i < persister_.logs.size(); i++) {
-    sum += persister_.logs[i].m_command.size() + 3;
+    sum += persister_.logs[i].command_str.size() + 3;
   }
   ret = (sum >= size ? true : false);
   if (ret) printf("[%d] in Exceed the log size is %d\n", peer_id_, sum);
@@ -1200,23 +1195,23 @@ bool Raft::ExceedLogSize(int size) {
   return ret;
 }
 
-void Raft::RecvSnapShot(std::string snapShot, int lastIncludedIndex) {
+void Raft::RecvSnapShot(std::string snap_shot, int last_included_index) {
   std::unique_lock<std::mutex> lock(mutex_);
 
-  if (lastIncludedIndex < this->last_included_index_) {
+  if (last_included_index < this->last_included_index_) {
     return;
   }
-  int compressLen = lastIncludedIndex - this->last_included_index_;
+  int compressLen = last_included_index - this->last_included_index_;
   printf(
-      "[%d] before log.size is %d, compressLen is %d, lastIncludedIndex is "
+      "[%d] before log.size is %d, compressLen is %d, last_included_index is "
       "%d\n",
       peer_id_, logs_.size(), compressLen, last_included_index_);
 
-  printf("[%d] : %d - %d = compressLen is %d\n", peer_id_, lastIncludedIndex,
+  printf("[%d] : %d - %d = compressLen is %d\n", peer_id_, last_included_index,
          this->last_included_index_, compressLen);
   this->last_included_term_ =
-      logs_[IdxToCompressLogPos(lastIncludedIndex)].m_term;
-  this->last_included_index_ = lastIncludedIndex;
+      logs_[IdxToCompressLogPos(last_included_index)].term;
+  this->last_included_index_ = last_included_index;
 
   std::vector<LogEntry> tmpLogs;
   for (int i = compressLen; i < logs_.size(); i++) {
@@ -1225,11 +1220,11 @@ void Raft::RecvSnapShot(std::string snapShot, int lastIncludedIndex) {
   logs_ = tmpLogs;
   printf("[%d] after log.size is %d\n", peer_id_, logs_.size());
   //更新了logs及lastTerm和lastIndex，需要持久化
-  persister_.snapShot = snapShot;
+  persister_.snap_shot = snap_shot;
   SaveRaftState();
 
   SaveSnapShot();
-  printf("[%d] persister_.size is %d, lastIncludedIndex is %d\n", peer_id_,
+  printf("[%d] persister_.size is %d, last_included_index is %d\n", peer_id_,
          persister_.logs.size(), last_included_index_);
 }
 
@@ -1238,7 +1233,7 @@ int Raft::IdxToCompressLogPos(int index) {
 }
 
 bool Raft::ReadSnapShot() {
-  std::string filename = "snapShot-" + std::to_string(peer_id_);
+  std::string filename = "snap_shot-" + std::to_string(peer_id_);
   if (::access(filename.c_str(), F_OK) == -1) return false;
   int fd = ::open(filename.c_str(), O_RDONLY);
   if (fd == -1) {
@@ -1255,20 +1250,20 @@ bool Raft::ReadSnapShot() {
     std::exit(-1);
   }
   ::close(fd);
-  std::string snapShot(buf);
-  persister_.snapShot = snapShot;
+  std::string snap_shot(buf);
+  persister_.snap_shot = snap_shot;
   return true;
 }
 
 void Raft::SaveSnapShot() {
-  std::string filename = "snapShot-" + std::to_string(peer_id_);
+  std::string filename = "snap_shot-" + std::to_string(peer_id_);
   int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT, 0664);
   if (fd == -1) {
     std::perror("::open");
     std::exit(-1);
   }
-  int len =
-      ::write(fd, persister_.snapShot.c_str(), persister_.snapShot.size() + 1);
+  int len = ::write(fd, persister_.snap_shot.c_str(),
+                    persister_.snap_shot.size() + 1);
   ::close(fd);
 }
 
@@ -1295,10 +1290,10 @@ void Raft::InstallSnapShotTokvServer() {
   }
 
   ApplyMsg msg;
-  msg.commandValid = false;
-  msg.snapShot = persister_.snapShot;
-  msg.lastIncludedIndex = this->last_included_index_;
-  msg.lastIncludedTerm = this->last_included_term_;
+  msg.is_command_valid = false;
+  msg.snap_shot = persister_.snap_shot;
+  msg.last_included_index = this->last_included_index_;
+  msg.last_included_term = this->last_included_term_;
 
   last_applied_ = last_included_index_;
   lock.unlock();
@@ -1319,12 +1314,12 @@ int Raft::LastIndex() { return last_included_index_ + logs_.size(); }
 int Raft::LastTerm() {
   int LastTerm = last_included_term_;
   if (logs_.size() != 0) {
-    LastTerm = logs_.back().m_term;
+    LastTerm = logs_.back().term;
   }
   return LastTerm;
 }
 
-#if 1 
+#if 0 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     printf("loss parameter of peersNum\n");
@@ -1338,11 +1333,11 @@ int main(int argc, char* argv[]) {
   std::srand((unsigned)std::time(nullptr));
   std::vector<PeersInfo> peers(peers_num);
   for (int i = 0; i < peers_num; i++) {
-    peers[i].peer_id_ = i;
-    peers[i].m_port.first = COMMOM_PORT + i;
-    peers[i].m_port.second = COMMOM_PORT + i + peers.size();
+    peers[i].peer_id = i;
+    peers[i].port.first = COMMOM_PORT + i;
+    peers[i].port.second = COMMOM_PORT + i + peers.size();
     // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].peer_id_,
-    // peers[i].m_port.first, peers[i].m_port.second);
+    // peers[i].port.first, peers[i].port.second);
   }
 
   std::vector<std::unique_ptr<Raft>> rafts;
@@ -1378,4 +1373,6 @@ int main(int argc, char* argv[]) {
   while (1)
     ;
 }
-#endif
+#endif  //#if 0
+
+#endif  // RYAN_DS_KV_RAFT_RAFT_H_

@@ -7,9 +7,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <thread>
-#include <mutex>
 #include <condition_variable>
+#include <mutex>
+#include <thread>
 
 #include "locker.h"
 using namespace std;
@@ -89,4 +89,4 @@ void* Select::Test(void* arg) {
   s->MySelect();
 }
 
-#endif //RYAN_DS_KV_RAFT_SELECT_H_
+#endif  // RYAN_DS_KV_RAFT_SELECT_H_
