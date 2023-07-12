@@ -1,3 +1,6 @@
+#ifndef RYAN_DS_KV_RAFT_RAFT_H_
+#define RYAN_DS_KV_RAFT_RAFT_H_
+
 #include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -1378,4 +1381,6 @@ int main(int argc, char* argv[]) {
   while (1)
     ;
 }
-#endif
+#endif //#if 0
+
+#endif //RYAN_DS_KV_RAFT_RAFT_H_
