@@ -13,7 +13,6 @@
 #include "buttonrpc.hpp"
 //#include "locker.h"
 
-
 constexpr int COMMOM_PORT = 1234;
 constexpr int HEART_BEART_PERIOD = 100000;
 
@@ -513,9 +512,9 @@ void* Raft::ProcessEntriesLoop(void* arg) {
     // raft->curr_term_);
     lock.unlock();
 
-    //pthread_t tid[raft->peers_.size() - 1];
-    //int i = 0;
-    //for (auto server : raft->peers_) {
+    // pthread_t tid[raft->peers_.size() - 1];
+    // int i = 0;
+    // for (auto server : raft->peers_) {
     //  if (server.peer_id_ == raft->peer_id_) continue;
     //  pthread_create(tid + i, nullptr, SendAppendEntries, raft);
     //  pthread_detach(tid[i]);
@@ -560,7 +559,7 @@ std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
 void Raft::PushBackLog(LogEntry log) { logs_.push_back(log); }
 
 void* Raft::SendAppendEntries(void* arg) {
-  //Raft* raft = (Raft*)arg;
+  // Raft* raft = (Raft*)arg;
   Raft* raft = static_cast<Raft*>(arg);
   buttonrpc client;
   AppendEntriesArgs args;
@@ -890,7 +889,7 @@ int main(int argc, char* argv[]) {
     std::cout << "the peers_num should be odd" << std::endl;
     return -1;
   }
-  
+
   std::srand((unsigned)std::time(nullptr));
   std::vector<PeersInfo> peers(peers_num);
   for (int i = 0; i < peers_num; i++) {
@@ -903,12 +902,12 @@ int main(int argc, char* argv[]) {
 
   std::vector<std::unique_ptr<Raft>> rafts;
   rafts.reserve(peers_num);
-  //Raft* rafts = new Raft[peers.size()];
+  // Raft* rafts = new Raft[peers.size()];
   for (int i = 0; i < peers_num; ++i) {
     rafts.push_back(std::make_unique<Raft>());
     rafts[i]->Make(peers, i);
   }
-  //for (int i = 0; i < peers.size(); i++) {
+  // for (int i = 0; i < peers.size(); i++) {
   //  rafts[i].Make(peers, i);
   //}
 
@@ -930,7 +929,8 @@ int main(int argc, char* argv[]) {
   ::usleep(400000);
   for (int i = 0; i < peers.size(); i++) {
     if (rafts[i]->GetState().second) {
-      rafts[i]->Kill();  // kill后选举及心跳的线程会宕机，会产生新的leader，很久之后了，因为上面传了1000条日志
+      rafts[i]
+          ->Kill();  // kill后选举及心跳的线程会宕机，会产生新的leader，很久之后了，因为上面传了1000条日志
       break;
     }
   }
