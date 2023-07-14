@@ -71,9 +71,9 @@ std::string Operation::GetCmd() {
 }
 
 struct StartRet {
-  StartRet() : cmd_index(-1), curr_term_(-1), is_leader(false) {}
+  StartRet() : cmd_index(-1), curr_term(-1), is_leader(false) {}
   int cmd_index;
-  int curr_term_;
+  int curr_term;
   bool is_leader;
 };
 
@@ -86,7 +86,7 @@ struct ApplyMsg {
 
   int last_included_index;
   int last_included_term;
-  std::string snap_shot;
+  std::string snapshot;
 };
 
 Operation ApplyMsg::GetOperation() {
@@ -121,14 +121,14 @@ struct PeersInfo {
 
 struct LogEntry {
   LogEntry(std::string cmd = "", int term = -1)
-      : command_str(cmd), term(term) {}
-  std::string command_str;
+      : command(cmd), term(term) {}
+  std::string command;
   int term;
 };
 
 struct Persister {
   std::vector<LogEntry> logs;
-  std::string snap_shot;
+  std::string snapshot;
   int curr_term;
   int voted_for;
   int last_included_index;
@@ -143,18 +143,18 @@ class AppendEntriesArgs {
   //     send_logs.clear();
   // }
   int term;
-  int leader_id_;
+  int leader_id;
   int prev_log_index;
   int prev_log_term;
   int leader_commit;
   std::string send_logs;
   friend Serializer& operator>>(Serializer& in, AppendEntriesArgs& d) {
-    in >> d.term >> d.leader_id_ >> d.prev_log_index >> d.prev_log_term >>
+    in >> d.term >> d.leader_id >> d.prev_log_index >> d.prev_log_term >>
         d.leader_commit >> d.send_logs;
     return in;
   }
   friend Serializer& operator<<(Serializer& out, AppendEntriesArgs d) {
-    out << d.term << d.leader_id_ << d.prev_log_index << d.prev_log_term
+    out << d.term << d.leader_id << d.prev_log_index << d.prev_log_term
         << d.leader_commit << d.send_logs;
     return out;
   }
@@ -319,27 +319,10 @@ void Raft::Make(std::vector<PeersInfo> peers, int id) {
 
   ReadRaftState();
   InstallSnapShotTokvServer();
-
-  // pthread_t listen_tid1;
-  // pthread_t listen_tid2;
-  // pthread_t listen_tid3;
-  // pthread_create(&listen_tid1, nullptr, ListenForVote, this);
-  // pthread_detach(listen_tid1);
-  // pthread_create(&listen_tid2, nullptr, ListenForAppend, this);
-  // pthread_detach(listen_tid2);
-  // pthread_create(&listen_tid3, nullptr, ApplyLogLoop, this);
-  // pthread_detach(listen_tid3);
+ 
   std::thread(&Raft::ListenForVote, this).detach();
   std::thread(&Raft::ListenForAppend, this).detach();
   std::thread(&Raft::ApplyLogLoop, this).detach();
-
-  // Using std::thread instead of pthread
-  // std::thread listen_thread1(&Raft::ListenForVote, this);
-  // listen_thread1.detach();
-  // std::thread listen_thread2(&Raft::ListenForAppend, this);
-  // listen_thread2.detach();
-  // std::thread listen_thread3(&Raft::ApplyLogLoop, this);
-  // listen_thread3.detach();
 }
 
 void* Raft::ApplyLogLoop(void* arg) {
@@ -365,7 +348,7 @@ void* Raft::ApplyLogLoop(void* arg) {
         raft->last_applied_++;
         int appliedIdx = raft->IdxToCompressLogPos(raft->last_applied_);
         ApplyMsg msg;
-        msg.command = raft->logs_[appliedIdx].command_str;
+        msg.command = raft->logs_[appliedIdx].command;
         msg.is_command_valid = true;
         msg.command_term = raft->logs_[appliedIdx].term;
         msg.command_index = raft->last_applied_;
@@ -548,7 +531,7 @@ bool Raft::CheckLogUptodate(int term, int index) {
 RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
   RequestVoteReply reply;
   reply.vote_granted = false;
-  std::unique_lock<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   reply.term = curr_term_;
 
   if (curr_term_ > args.term) {
@@ -580,7 +563,7 @@ void* Raft::ProcessEntriesLoop(void* arg) {
   Raft* raft = static_cast<Raft*>(arg);
   while (!raft->dead_) {
     ::usleep(1000);
-    std::unique_lock<std::mutex> lock(raft->mutex_);
+    std::lock_guard<std::mutex> lock(raft->mutex_);
     if (raft->state_ != LEADER) {
       continue;
     }
@@ -665,7 +648,7 @@ void* Raft::SendInstallSnapShot(void* arg) {
   args.leader_id = raft->peer_id_;
   args.term = raft->curr_term_;
   raft->ReadSnapShot();
-  args.snapshot = raft->persister_.snap_shot;
+  args.snapshot = raft->persister_.snapshot;
 
   printf("in send install snap_shot is %s\n", args.snapshot.c_str());
 
@@ -745,8 +728,8 @@ InstallSnapSHotReply Raft::InstallSnapShot(InstallSnapShotArgs args) {
 
   last_included_index_ = args.last_included_index;
   last_included_term_ = args.last_included_term;
-  persister_.snap_shot = args.snapshot;
-  printf("in raft stall rpc, snap_shot is %s\n", persister_.snap_shot.c_str());
+  persister_.snapshot = args.snapshot;
+  printf("in raft stall rpc, snapshot is %s\n", persister_.snapshot.c_str());
   SaveRaftState();
   SaveSnapShot();
 
@@ -823,13 +806,13 @@ void* Raft::SendAppendEntries(void* arg) {
   }
 
   args.term = raft->curr_term_;
-  args.leader_id_ = raft->peer_id_;
+  args.leader_id = raft->peer_id_;
   args.prev_log_index = raft->next_index_[clientPeerId] - 1;
   args.leader_commit = raft->commit_index_;
 
   for (int i = raft->IdxToCompressLogPos(args.prev_log_index) + 1;
        i < raft->logs_.size(); i++) {
-    args.send_logs += (raft->logs_[i].command_str + "," +
+    args.send_logs += (raft->logs_[i].command + "," +
                        std::to_string(raft->logs_[i].term) + ";");
   }
 
@@ -971,7 +954,7 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
       printf(
           " [%d]'s logs.size : %d < [%d]'s prevLogIdx : %d, ret conflict idx "
           "is %d\n",
-          peer_id_, LastIndex(), args.leader_id_, args.prev_log_index,
+          peer_id_, LastIndex(), args.leader_id, args.prev_log_index,
           reply.conflict_index);
       lock.unlock();
       reply.success = false;
@@ -982,7 +965,7 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
         args.prev_log_term) {
       printf(" [%d]'s prevLogterm : %d != [%d]'s prevLogTerm : %d\n", peer_id_,
              logs_[IdxToCompressLogPos(args.prev_log_index)].term,
-             args.leader_id_, args.prev_log_term);
+             args.leader_id, args.prev_log_term);
 
       reply.conflict_term =
           logs_[IdxToCompressLogPos(args.prev_log_index)].term;
@@ -1047,12 +1030,12 @@ StartRet Raft::Start(Operation op) {
   }
 
   LogEntry log;
-  log.command_str = op.GetCmd();
+  log.command = op.GetCmd();
   log.term = curr_term_;
   PushBackLog(log);
 
   ret.cmd_index = LastIndex();
-  ret.curr_term_ = curr_term_;
+  ret.curr_term = curr_term_;
   ret.is_leader = true;
   // printf("index : %d, term : %d, isleader : %d\n", ret.cmd_index,
   // ret.curr_term_, ret.is_leader == false ? 0 : 1);
@@ -1064,7 +1047,7 @@ void Raft::PrintLogs() {
   for (const auto& a : logs_) {
     printf("logs : %d\n", a.term);
   }
-  cout << endl;
+  std::cout << std::endl;
 }
 
 void Raft::Serialize() {
@@ -1074,7 +1057,7 @@ void Raft::Serialize() {
   str += std::to_string(this->persister_.last_included_index) + ";" +
          std::to_string(this->persister_.last_included_term) + ";";
   for (const auto& log : this->persister_.logs) {
-    str += log.command_str + "," + std::to_string(log.term) + ".";
+    str += log.command + "," + std::to_string(log.term) + ".";
   }
   std::string filename = "persister_-" + std::to_string(peer_id_);
   int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT, 0664);
@@ -1187,7 +1170,7 @@ bool Raft::ExceedLogSize(int size) {
   std::unique_lock<std::mutex> lock(mutex_);
   int sum = 8;
   for (int i = 0; i < persister_.logs.size(); i++) {
-    sum += persister_.logs[i].command_str.size() + 3;
+    sum += persister_.logs[i].command.size() + 3;
   }
   ret = (sum >= size ? true : false);
   if (ret) printf("[%d] in Exceed the log size is %d\n", peer_id_, sum);
@@ -1220,7 +1203,7 @@ void Raft::RecvSnapShot(std::string snap_shot, int last_included_index) {
   logs_ = tmpLogs;
   printf("[%d] after log.size is %d\n", peer_id_, logs_.size());
   //更新了logs及lastTerm和lastIndex，需要持久化
-  persister_.snap_shot = snap_shot;
+  persister_.snapshot = snap_shot;
   SaveRaftState();
 
   SaveSnapShot();
@@ -1251,7 +1234,7 @@ bool Raft::ReadSnapShot() {
   }
   ::close(fd);
   std::string snap_shot(buf);
-  persister_.snap_shot = snap_shot;
+  persister_.snapshot = snap_shot;
   return true;
 }
 
@@ -1262,8 +1245,8 @@ void Raft::SaveSnapShot() {
     std::perror("::open");
     std::exit(-1);
   }
-  int len = ::write(fd, persister_.snap_shot.c_str(),
-                    persister_.snap_shot.size() + 1);
+  int len = ::write(fd, persister_.snapshot.c_str(),
+                    persister_.snapshot.size() + 1);
   ::close(fd);
 }
 
@@ -1291,7 +1274,7 @@ void Raft::InstallSnapShotTokvServer() {
 
   ApplyMsg msg;
   msg.is_command_valid = false;
-  msg.snap_shot = persister_.snap_shot;
+  msg.snapshot = persister_.snapshot;
   msg.last_included_index = this->last_included_index_;
   msg.last_included_term = this->last_included_term_;
 

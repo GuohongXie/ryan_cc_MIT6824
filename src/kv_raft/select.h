@@ -1,5 +1,5 @@
-#ifndef _SELECT_H
-#define _SELECT_H
+#ifndef RYAN_DS_KV_RAFT_SELECT_H_
+#define RYAN_DS_KV_RAFT_SELECT_H_
 
 #include <bits/stdc++.h>
 #include <fcntl.h>
@@ -7,78 +7,68 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "locker.h"
-using namespace std;
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 
 class Select {
  public:
-  Select(string fifoName);
+  Select(std::string fifo_name);
   int timeout;
-  string fifoName;
+  std::string fifo_name;
   char op;
-  locker m_lock;
-  cond m_cond;
-  void mySelect();
-  static void* wait_time(void* arg);
-  static void* work(void* arg);
-  static void* setTimeOut(void* arg);
-  static void* send(void* arg);
-  static void* test(void* arg);
+  std::mutex mutex;
+  std::condition_variable cond;
+  void MySelect();
+  static void* WaitTime(void* arg);
+  static void* Work(void* arg);
+  static void* SetTimeOut(void* arg);
+  static void* Send(void* arg);
+  static void* Test(void* arg);
 };
 
-Select::Select(string fifoName) {
-  this->fifoName = fifoName;
-  pthread_t tid;
-  int ret = mkfifo(fifoName.c_str(), 0664);
-  pthread_create(&tid, NULL, send, this);
-  pthread_detach(tid);
-  pthread_t test_tid;
-  pthread_create(&test_tid, NULL, test, this);
-  pthread_detach(test_tid);
+Select::Select(std::string fifo_name) {
+  this->fifo_name = fifo_name;
+  int ret = ::mkfifo(fifo_name.c_str(), 0664);
+  std::thread(&Select::Send, this).detach();
+  std::thread(&Select::Test, this).detach();
 }
 
-void* Select::send(void* arg) {
-  Select* s = (Select*)arg;
-  int fd = open(s->fifoName.c_str(), O_WRONLY);
+void* Select::Send(void* arg) {
+  Select* s = static_cast<Select*>(arg);
+  int fd = ::open(s->fifo_name.c_str(), O_WRONLY);
   char* buf = "12345";
-  sleep(1);
-  write(fd, buf, strlen(buf) + 1);
+  ::sleep(1);
+  ::write(fd, buf, strlen(buf) + 1);
 }
 
-void* Select::wait_time(void* arg) { sleep(2); }
+void* Select::WaitTime(void* arg) { ::sleep(2); }
 
-void* Select::setTimeOut(void* arg) {
-  Select* select = (Select*)arg;
-  pthread_t tid;
-  void* ret;
-  pthread_create(&tid, NULL, wait_time, NULL);
-  pthread_join(tid, &ret);
-  select->m_lock.lock();
+void* Select::SetTimeOut(void* arg) {
+  Select* select = static_cast<Select*>(arg);
+  std::thread t(WaitTime, nullptr);
+  t.join();
+  std::unique_lock<std::mutex> lock(select->mutex);
   select->op = '1';
-  select->m_cond.signal();
-  select->m_lock.unlock();
+  select->cond.notify_one();
 }
 
-void* Select::work(void* arg) {
-  Select* select = (Select*)arg;
+void* Select::Work(void* arg) {
+  Select* select = static_cast<Select*>(arg);
   char buf[100];
-  int fd = open(select->fifoName.c_str(), O_RDONLY);
-  read(fd, buf, sizeof(buf));
-  select->m_lock.lock();
+  int fd = ::open(select->fifo_name.c_str(), O_RDONLY);
+  ::read(fd, buf, sizeof(buf));
+  std::unique_lock<std::mutex> lock(select->mutex);
   select->op = '2';
   select->m_cond.signal();
-  select->m_lock.unlock();
 }
 
-void Select::mySelect() {
-  pthread_t wait_tid;
-  pthread_create(&wait_tid, NULL, setTimeOut, this);
-  pthread_detach(wait_tid);
-  pthread_t work_tid;
-  pthread_create(&work_tid, NULL, work, this);
-  pthread_detach(work_tid);
-  m_lock.lock();
-  m_cond.wait(m_lock.getLock());
+void Select::MySelect() {
+  std::thread(&Select::SetTimeOut, this).detach();
+  std::thread(&Select::Work, this).detach();
+  std::unique_lock<std::mutex> lock(mutex);
+  cond.wait(lock);
   switch (op) {
     case '1':
       printf("time is out\n");
@@ -87,12 +77,11 @@ void Select::mySelect() {
       printf("recv data\n");
       break;
   }
-  m_lock.unlock();
 }
 
-void* Select::test(void* arg) {
-  Select* s = (Select*)arg;
-  s->mySelect();
+void* Select::Test(void* arg) {
+  Select* s = static_cast<Select*>(arg);
+  s->MySelect();
 }
 
-#endif
+#endif  // RYAN_DS_KV_RAFT_SELECT_H_

@@ -1,0 +1,7 @@
+buttonrpc:227
+void buttonrpc::as_client( std::string ip, int port )
+需要改为传const引用
+void buttonrpc::as_client(const std::string& ip, int port)
+
+
+src/kv_raft/select.h 需要验证正确性

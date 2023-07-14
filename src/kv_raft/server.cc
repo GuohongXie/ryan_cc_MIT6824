@@ -126,7 +126,7 @@ GetReply KVServer::Get(GetArgs args) {
   operation.request_id = args.request_id;
 
   StartRet ret = raft_.Start(operation);
-  operation.term = ret.curr_term_;
+  operation.term = ret.curr_term;
   operation.index = ret.cmd_index;
 
   if (ret.is_leader == false) {
@@ -184,7 +184,7 @@ PutAppendReply KVServer::PutAppend(PutAppendArgs args) {
 
   StartRet ret = raft_.Start(operation);
 
-  operation.term = ret.curr_term_;
+  operation.term = ret.curr_term;
   operation.index = ret.cmd_index;
   if (ret.is_leader == false) {
     printf("client %d's PutAppend request is wrong leader %d\n", args.client_id,
@@ -235,11 +235,11 @@ void* KVServer::ApplyLoop(void* arg) {
 
     if (!msg.is_command_valid) {  //为快照处理的逻辑
       std::lock_guard<std::mutex> lock(kv->mutex_);
-      if (msg.snap_shot.size() == 0) {
+      if (msg.snapshot.size() == 0) {
         kv->database_.clear();
         kv->client_seq_map_.clear();
       } else {
-        kv->RecoverySnapShot(msg.snap_shot);
+        kv->RecoverySnapShot(msg.snapshot);
       }
       //一般初始化时安装快照，以及follower收到installSnapShot向上层kvserver发起安装快照请求
       kv->last_applied_index_ = msg.last_included_index;
