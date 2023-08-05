@@ -1,4 +1,4 @@
-#include "worker.h"
+#include "map_reduce/mr/worker.h"
 
 // static member initialsize
 int Worker::map_id_ = 0;

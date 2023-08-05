@@ -14,8 +14,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "buttonrpc.hpp"
-#include "semaphore.hpp"
+#include "buttonrpc/buttonrpc.hpp"
+#include "kv_raft/semaphore.hpp"
 
 constexpr int COMMOM_PORT = 1234;
 constexpr int HEART_BEART_PERIOD = 100000;

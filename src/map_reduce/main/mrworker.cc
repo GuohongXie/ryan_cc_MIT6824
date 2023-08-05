@@ -1,12 +1,12 @@
-#include "worker.cc"
-#include "worker.h"
+#include "map_reduce/mr/worker.cc"
+#include <string>
 
 //下面这俩行写在worker.h文件里面了，可移植性更好
 // using MapFunc = std::vector<KeyValue> (*)(KeyValue);
 // using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
 
 const std::string LIB_CACULATE_PATH_STRING =
-    "./libmap_reduce.so";  //用于加载的动态库的路径
+    "../mrapps/libmr_word_count.so";  //用于加载的动态库的路径
 const int RPC_COORDINATOR_SERVER_PORT = 5555;
 const std::string RPC_COORDINATOR_SERVER_IP = "127.0.0.1";
 

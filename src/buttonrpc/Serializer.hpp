@@ -5,7 +5,8 @@
  *
  */
 
-#pragma once
+#ifndef RYAN_DS_BUTTONRPC_SERIALIZER_HPP_
+#define RYAN_DS_BUTTONRPC_SERIALIZER_HPP_
 #include <algorithm>
 #include <cstdint>
 #include <sstream>
@@ -36,7 +37,7 @@ class StreamBuffer : public vector<char> {
   }
 
  private:
-  // µ±Ç°×Ö½ÚÁ÷Î»ÖÃ
+  // ï¿½ï¿½Ç°ï¿½Ö½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
   unsigned int m_curpos;
 };
 
@@ -79,7 +80,7 @@ class Serializer {
   template <typename T>
   void input_type(T t);
 
-  // Ö±½Ó¸øÒ»¸ö³¤¶È£¬ ·µ»Øµ±Ç°Î»ÖÃÒÔºóx¸ö×Ö½ÚÊý¾Ý
+  // Ö±ï¿½Ó¸ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½È£ï¿½ ï¿½ï¿½ï¿½Øµï¿½Ç°Î»ï¿½ï¿½ï¿½Ôºï¿½xï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½ï¿½ï¿½
   void get_length_mem(char* p, int len) {
     memcpy(p, m_iodevice.current(), len);
     m_iodevice.offset(len);
@@ -143,13 +144,13 @@ inline void Serializer::input_type(T t) {
 
 template <>
 inline void Serializer::input_type(std::string in) {
-  // ÏÈ´æÈë×Ö·û´®³¤¶È
+  // ï¿½È´ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
   uint16_t len = in.size();
   char* p = reinterpret_cast<char*>(&len);
   byte_orser(p, sizeof(uint16_t));
   m_iodevice.input(p, sizeof(uint16_t));
 
-  // ´æÈë×Ö·û´®
+  // ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½
   if (len == 0) return;
   char* d = new char[len];
   memcpy(d, in.c_str(), len);
@@ -161,3 +162,5 @@ template <>
 inline void Serializer::input_type(const char* in) {
   input_type<std::string>(std::string(in));
 }
+
+#endif //RYAN_DS_BUTTONRPC_SERIALIZER_HPP_

@@ -1,11 +1,28 @@
 # Editors.
 *.sw*
+
 #.vscode
 .DS_Store
 bazel-*
-compile_commands.json
 
 # Build directory.
 build/
 out/
 cmake-build-debug/
+
+#cmake
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
+Makefile
+bin/
+
+#clangd
+.cache/
+#compile_commands.json
+
+# results files
+persister*
+snap_shot*
+mr-out-*
+*.so

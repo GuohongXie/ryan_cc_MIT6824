@@ -5,23 +5,26 @@
  *
  */
 
-#pragma once
+#ifndef RYAN_DS_BUTTONRPC_BUTTONRPC_HPP_
+#define RYAN_DS_BUTTONRPC_BUTTONRPC_HPP_
 #include <functional>
 #include <map>
 #include <sstream>
 #include <string>
 #include <zmq.hpp>
 
-#include "Serializer.hpp"
+#include "buttonrpc/Serializer.hpp"
 
 template <typename T>
 struct type_xx {
-  typedef T type;
+  using type = T;
+
 };
 
 template <>
 struct type_xx<void> {
-  typedef int8_t type;
+  using type = int8_t;
+
 };
 
 class buttonrpc {
@@ -307,7 +310,7 @@ void buttonrpc::run() {
   }
 }
 
-// ´¦Àíº¯ÊýÏà¹Ø
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 Serializer* buttonrpc::call_(std::string name, const char* data, int len) {
   Serializer* ds = new Serializer();
@@ -524,3 +527,5 @@ inline buttonrpc::value_t<R> buttonrpc::call(std::string name, P1 p1, P2 p2,
   ds << name << p1 << p2 << p3 << p4 << p5;
   return net_call<R>(ds);
 }
+
+#endif //RYAN_DS_BUTTONRPC_BUTTONRPC_HPP_

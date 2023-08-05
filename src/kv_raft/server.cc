@@ -13,8 +13,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "arguments.hpp"
-#include "raft.hpp"
+#include "kv_raft/arguments.hpp"
+#include "kv_raft/raft.hpp"
 
 constexpr int EVERY_SERVER_PORT = 3;
 

@@ -1,11 +1,16 @@
-#include "buttonrpc.hpp"
-#include "coordinator.h"
+#include "map_reduce/mr/coordinator.h"
+
+#include <cstdio>
+#include <cstdlib>
+
+#include "buttonrpc/buttonrpc.hpp"
+
 constexpr int RPC_SERVER_PORT = 5555;
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     printf("missing parameter! The format is ./mrcoordinator pg*.txt");
-    exit(-1);
+    std::exit(-1);
   }
   // alarm(10);
   buttonrpc coordinator_server;

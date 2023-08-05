@@ -1,0 +1,37 @@
+[
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/kv_raft_client.dir/src/kv_raft/client.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/kv_raft/client.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/kv_raft/client.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/kv_raft_server.dir/src/kv_raft/server.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/kv_raft/server.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/kv_raft/server.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/raft.dir/src/raft/raft.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/raft/raft.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/raft/raft.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/mrworker.dir/src/map_reduce/main/mrworker.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/main/mrworker.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/main/mrworker.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/mrcoordinator.dir/src/map_reduce/main/mrcoordinator.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/main/mrcoordinator.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/main/mrcoordinator.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/mrcoordinator.dir/src/map_reduce/mr/coordinator.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/mr/coordinator.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/mr/coordinator.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++  -Dmr_word_count_EXPORTS -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src  -fPIC   -std=gnu++17 -o CMakeFiles/mr_word_count.dir/src/map_reduce/mrapps/word_count.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/mrapps/word_count.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/map_reduce/mrapps/word_count.cc"
+}
+]

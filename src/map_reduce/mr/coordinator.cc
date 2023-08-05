@@ -1,4 +1,4 @@
-#include "coordinator.h"
+#include "map_reduce/mr/coordinator.h"
 
 Coordinator::Coordinator(int map_num, int reduce_num)
     : done_(false), map_num_(map_num), reduce_num_(reduce_num) {
@@ -44,7 +44,7 @@ std::string Coordinator::AssignTask() {
 }
 
 void* Coordinator::WaitMapTask(void* arg) {
-  Coordinator* map = static_cast<Coordinator*>(arg);
+  auto map = static_cast<Coordinator*>(arg);
   std::thread tid([&]() {
     char op = 'm';
     WaitTime(&op);
@@ -96,7 +96,7 @@ void* Coordinator::WaitTime(void* arg) {
 }
 
 void* Coordinator::WaitReduceTask(void* arg) {
-  Coordinator* reduce = static_cast<Coordinator*>(arg);
+  auto reduce = static_cast<Coordinator*>(arg);
   void* status;
   std::thread t([&]() {
     char op = 'r';
@@ -107,16 +107,16 @@ void* Coordinator::WaitReduceTask(void* arg) {
   //若超时后在对应的hashmap中没有该reduce任务完成的记录，将该任务重新加入工作队列
   if (!reduce->finished_reduce_task_.count(
           reduce->running_reduce_work_[reduce->curr_reduce_index_])) {
-    for (auto a : reduce->input_file_name_list_) {
-      printf(" before insert %s\n", a);
+    for (const auto& str : reduce->input_file_name_list_) {
+      printf(" before insert %s\n", str.c_str());
     }
     reduce->reduce_index_.emplace_back(
         reduce->running_reduce_work_[reduce->curr_reduce_index_]);
     printf("%d reduce is timeout\n",
            reduce->running_reduce_work_[reduce->curr_reduce_index_]);
     (reduce->curr_reduce_index_)++;
-    for (auto a : reduce->input_file_name_list_) {
-      printf(" after insert %s\n", a);
+    for (const auto& str : reduce->input_file_name_list_) {
+      printf(" after insert %s\n", str.c_str());
     }
     lock.unlock();
     return nullptr;
@@ -142,7 +142,6 @@ void Coordinator::SetMapStat(std::string file_name) {
   finished_map_task_[file_name] = 1;  //通过worker的RPC调用修改map任务的完成状态
   // printf("map task : %s is finished, maphash is %p\n", file_name.c_str(),
   // &finished_map_task_);
-  return;
 }
 
 bool Coordinator::IsMapDone() {
@@ -170,11 +169,9 @@ int Coordinator::AssignReduceTask() {
 
 void Coordinator::SetReduceStat(int task_index) {
   std::lock_guard<std::mutex> lock(mutex_);
-  finished_reduce_task_[task_index] =
-      1;  //通过worker的RPC调用修改reduce任务的完成状态
+  finished_reduce_task_[task_index] = 1;  //通过worker的RPC调用修改reduce任务的完成状态
   // printf(" reduce task%d is finished, reducehash is %p\n", task_index,
   // &finished_reduce_task_);
-  return;
 }
 
 bool Coordinator::IsAllMapAndReduceDone() {

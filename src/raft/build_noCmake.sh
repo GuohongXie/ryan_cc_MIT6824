@@ -2,7 +2,10 @@
 
 set -x
 
-g++ -std=c++17 raft.cc -I../buttonrpc -lzmq -pthread -o raft
+rm persis*
+rm raft
+
+g++ -std=c++17 raft.cc -I../ -lzmq -pthread -o raft
 
 
 # Use the following command to run all the unit tests

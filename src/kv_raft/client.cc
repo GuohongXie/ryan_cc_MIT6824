@@ -7,8 +7,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "arguments.hpp"
-#include "buttonrpc.hpp"
+#include "kv_raft/arguments.hpp"
+#include "buttonrpc/buttonrpc.hpp"
 
 // class ServerInfo{
 // public:

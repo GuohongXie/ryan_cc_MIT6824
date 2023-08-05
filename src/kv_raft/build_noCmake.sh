@@ -3,16 +3,15 @@
 set -x
 
 rm persis*
-rm raft
-g++ -o0 -g -std=c++17 raft.cc -I../buttonrpc -lzmq -pthread -o raft
+rm kv_raft_raft
+g++ -o0 -g -std=c++17 raft.cc -I../ -lzmq -pthread -o kv_raft_raft
 
-rm server
-rm persis*
-rm client
+rm kv_raft_server
+rm kv_raft_client
 rm snap*
 
-g++ -o0 -g -std=c++17 server.cc -I../buttonrpc -lzmq -pthread -o server
-g++ -o0 -g -std=c++17 client.cc -I../buttonrpc -lzmq -pthread -o client
+g++ -o0 -g -std=c++17 server.cc -I../ -lzmq -pthread -o kv_raft_server
+g++ -o0 -g -std=c++17 client.cc -I../ -lzmq -pthread -o kv_raft_client
 
 
 # Use the following command to run all the unit tests

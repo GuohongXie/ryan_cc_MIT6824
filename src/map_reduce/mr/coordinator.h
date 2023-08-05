@@ -1,9 +1,6 @@
 #ifndef RYAN_DS_MAP_REDUCE_MR_COORDINATOR_H_
 #define RYAN_DS_MAP_REDUCE_MR_COORDINATOR_H_
 
-#include <unistd.h>  // ::sleep()
-
-//#include <iostream>
 #include <cstdio>
 #include <list>
 #include <mutex>
@@ -11,9 +8,8 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-//#include <condition_variable>
-//#include <any>
-//#include <chrono>
+
+#include <unistd.h>  // ::sleep()
 
 class Coordinator {
  public:
@@ -21,7 +17,7 @@ class Coordinator {
   static void* WaitMapTask(void* arg);     //回收map的定时线程
   static void* WaitReduceTask(void* arg);  //回收reduce的定时线程
   static void* WaitTime(void* arg);        //用于定时的线程
-  Coordinator(
+  explicit Coordinator(
       int map_num = 8,
       int reduce_num =
           8);  //带缺省值的有参构造，也可通过命令行传参指定，我偷懒少打两个数字直接放构造函数里
@@ -37,7 +33,7 @@ class Coordinator {
   void WaitReduce(int reduce_idx);
   bool IsAllMapAndReduceDone();  //判断reduce任务是否已经完成
   bool
-  GetFinalStat() {  //所有任务是否完成，实际上reduce完成就完成了，有点小重复
+  GetFinalStat() const {  //所有任务是否完成，实际上reduce完成就完成了，有点小重复
     return done_;
   }
 
