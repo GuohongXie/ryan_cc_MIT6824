@@ -8,6 +8,12 @@ rm src/map_reduce/main/mrcoordinator
 rm src/raft/raft
 rm src/kv_raft/kv_raft_server
 rm src/kv_raft/kv_raft_client
+rm src/shard_kv/shard_master/shard_kv_server_a
+rm src/shard_kv/shard_master/shard_kv_client_a
+rm src/shard_kv/shard_master/shard_kv_test_a
+rm src/shard_kv/shard_kv_server_b
+rm src/shard_kv/shard_kv_client_b
+rm src/shard_kv/shard_kv_test_b
 
 # delete old build files
 rm -rf build
@@ -28,9 +34,17 @@ cp lib/libmr_word_count.so ../src/map_reduce/mrapps/
 cp bin/raft ../src/raft/
 cp bin/kv_raft_server ../src/kv_raft/
 cp bin/kv_raft_client ../src/kv_raft/
+cp bin/shard_kv_server_a ../src/shard_kv/shard_master/
+cp bin/shard_kv_client_a ../src/shard_kv/shard_master/
+cp bin/shard_kv_test_a ../src/shard_kv/shard_master/
+cp bin/shard_kv_server_b ../src/shard_kv/
+cp bin/shard_kv_client_b ../src/shard_kv/
+cp bin/shard_kv_test_b ../src/shard_kv/
 
 # remove middle files (OPTIONAL)
 rm ../src/kv_raft/persister*
 rm ../src/kv_raft/snap_shot*
 rm -f ../src/kv_raft/fifo-*
 rm ../src/raft/persister*
+rm ../src/shard_kv/shard_master/persister*
+rm ../src/shard_kv/persister*
