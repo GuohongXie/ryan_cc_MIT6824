@@ -165,24 +165,24 @@ int main() {
   //-------------------------------------test-------------------------------------
   while (1) {
     clerk.Put("abc", "123");
-    cout << clerk.Get("abc") << endl;
+    std::cout << clerk.Get("abc") << std::endl;
     clerk2.Put("abc", "456");
     clerk3.Append("abc", "789");
-    cout << clerk.Get("abc") << endl;
+    std::cout << clerk.Get("abc") << std::endl;
     clerk4.Put("bcd", "111");
-    cout << clerk.Get("bcd") << endl;
+    std::cout << clerk.Get("bcd") << std::endl;
     clerk5.Append("bcd", "222");
-    cout << clerk3.Get("bcd") << endl;
-    cout << clerk3.Get("abcd") << endl;
+    std::cout << clerk3.Get("bcd") << std::endl;
+    std::cout << clerk3.Get("abcd") << std::endl;
     clerk5.Append("bcd", "222");
     clerk4.Append("bcd", "222");
-    cout << clerk2.Get("bcd") << endl;
+    std::cout << clerk2.Get("bcd") << std::endl;
     clerk3.Append("bcd", "222");
     clerk2.Append("bcd", "232");
-    cout << clerk4.Get("bcd") << endl;
+    std::cout << clerk4.Get("bcd") << std::endl;
     clerk.Append("bcd", "222");
     clerk4.Put("bcd", "111");
-    cout << clerk3.Get("bcd") << endl;
+    std::cout << clerk3.Get("bcd") << std::endl;
     ::usleep(10000);
   }
   //-------------------------------------test-------------------------------------

@@ -22,8 +22,8 @@ class Coordinator {
       int reduce_num =
           8);  //带缺省值的有参构造，也可通过命令行传参指定，我偷懒少打两个数字直接放构造函数里
   void GetAllFile(int argc, char* argv[]);  //从argv[]中获取待处理的文件名
-  int map_num() { return map_num_; }
-  int reduce_num() { return reduce_num_; }
+  int map_num() const { return map_num_; }
+  int reduce_num() const { return reduce_num_; }
   std::string AssignTask();                //分配map任务的函数，RPC
   int AssignReduceTask();                  //分配reduce任务的函数，RPC
   void SetMapStat(std::string file_name);  //设置特定map任务完成的函数，RPC

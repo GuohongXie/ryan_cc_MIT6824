@@ -578,7 +578,7 @@ void* Raft::SendAppendEntries(void* arg) {
 
   for (int i = args.prev_log_index; i < raft->logs_.size(); i++) {
     args.send_logs +=
-        (raft->logs_[i].command + "," + to_string(raft->logs_[i].term) + ";");
+        (raft->logs_[i].command + "," + std::to_string(raft->logs_[i].term) + ";");
   }
   if (args.prev_log_index == 0) {
     args.prev_log_term = 0;
@@ -738,7 +738,7 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
   SaveRaftState();
   logSize = logs_.size();
   if (commit_index_ < args.leader_commit) {
-    commit_index_ = min(args.leader_commit, logSize);
+    commit_index_ = std::min(args.leader_commit, logSize);
   }
   for (auto a : logs_) printf("%d ", a.term);
   printf(" [%d] sync success\n", peer_id_);

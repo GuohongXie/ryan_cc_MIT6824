@@ -17,18 +17,18 @@ int main() {
   //运行时从动态库中加载map及reduce函数(根据实际需要的功能加载对应的Func)
   void* handle = dlopen(LIB_CACULATE_PATH_STRING.c_str(), RTLD_LAZY);
   if (!handle) {
-    cerr << "Cannot open library: " << dlerror() << '\n';
+    std::cerr << "Cannot open library: " << dlerror() << '\n';
     exit(-1);
   }
   worker.map_func = (MapFunc)dlsym(handle, "MapFunc");
   if (!worker.map_func) {
-    cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
+    std::cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
     dlclose(handle);
     exit(-1);
   }
   worker.reduce_func = (ReduceFunc)dlsym(handle, "ReduceFunc");
   if (!worker.reduce_func) {
-    cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
+    std::cerr << "Cannot load symbol 'hello': " << dlerror() << '\n';
     dlclose(handle);
     exit(-1);
   }

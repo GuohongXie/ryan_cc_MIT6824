@@ -992,7 +992,7 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
   }
   SaveRaftState();
   if (commit_index_ < args.leader_commit) {
-    commit_index_ = min(args.leader_commit, LastIndex());
+    commit_index_ = std::min(args.leader_commit, LastIndex());
     // commit_index_ = args.leader_commit;
   }
   // for(auto a : logs_) printf("%d ", a.term);

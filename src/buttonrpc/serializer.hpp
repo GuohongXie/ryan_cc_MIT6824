@@ -1,76 +1,70 @@
-/**
- *
- *	buttonrpc library
- *	Copyright 2018-04-28 Button
- *
- */
-
 #ifndef RYAN_DS_BUTTONRPC_SERIALIZER_HPP_
 #define RYAN_DS_BUTTONRPC_SERIALIZER_HPP_
+
+#include <cstring>
 #include <algorithm>
 #include <cstdint>
 #include <sstream>
 #include <vector>
-using namespace std;
 
-class StreamBuffer : public vector<char> {
+class StreamBuffer : public std::vector<char> {
  public:
-  StreamBuffer() { m_curpos = 0; }
+  StreamBuffer() { curr_pos_ = 0; }
   StreamBuffer(const char* in, size_t len) {
-    m_curpos = 0;
+    curr_pos_ = 0;
     insert(begin(), in, in + len);
   }
-  ~StreamBuffer(){};
+  ~StreamBuffer()= default;
 
-  void reset() { m_curpos = 0; }
+  void reset() { curr_pos_ = 0; }
   const char* data() { return &(*this)[0]; }
-  const char* current() { return &(*this)[m_curpos]; }
-  void offset(int k) { m_curpos += k; }
-  bool is_eof() { return (m_curpos >= size()); }
+  const char* current() { return &(*this)[curr_pos_]; }
+  void offset(int k) { curr_pos_ += k; }
+  bool is_eof() { return (curr_pos_ >= size()); }
   void input(char* in, size_t len) { insert(end(), in, in + len); }
   int findc(char c) {
-    iterator itr = find(begin() + m_curpos, end(), c);
+    auto itr = find(begin() + curr_pos_, end(), c);
     if (itr != end()) {
-      return itr - (begin() + m_curpos);
+      return static_cast<int>(itr - (begin() + curr_pos_));
     }
     return -1;
   }
 
  private:
-  // ��ǰ�ֽ���λ��
-  unsigned int m_curpos;
+  // 
+  unsigned int curr_pos_;
 };
 
 class Serializer {
  public:
-  Serializer() { m_byteorder = LittleEndian; };
-  ~Serializer(){};
+  Serializer() { byte_order_ = LittleEndian; };
+  ~Serializer()= default;;
 
-  Serializer(StreamBuffer dev, int byteorder = LittleEndian) {
-    m_byteorder = byteorder;
-    m_iodevice = dev;
+  explicit Serializer(const StreamBuffer& dev, int byteorder = LittleEndian) {
+    byte_order_ = byteorder;
+    io_device_ = dev;
   }
 
  public:
   enum ByteOrder { BigEndian, LittleEndian };
 
  public:
-  void reset() { m_iodevice.reset(); }
-  int size() { return m_iodevice.size(); }
-  void skip_raw_date(int k) { m_iodevice.offset(k); }
-  const char* data() { return m_iodevice.data(); }
-  void byte_orser(char* in, int len) {
-    if (m_byteorder == BigEndian) {
-      reverse(in, in + len);
+  void reset() { io_device_.reset(); }
+  int size() { return io_device_.size(); }
+  void skip_raw_date(int k) { io_device_.offset(k); }
+  const char* data() { return io_device_.data(); }
+  void byte_orser(char* in, int len) const {
+    if (byte_order_ == BigEndian) {
+      std::reverse(in, in + len);
     }
   }
   void write_raw_data(char* in, int len) {
-    m_iodevice.input(in, len);
-    m_iodevice.offset(len);
+    io_device_.input(in, len);
+    io_device_.offset(len);
   }
-  const char* current() { return m_iodevice.current(); }
+  const char* current() { return io_device_.current(); }
   void clear() {
-    m_iodevice.clear();
+    io_device_.clear();
     reset();
   }
 
@@ -80,10 +74,10 @@ class Serializer {
   template <typename T>
   void input_type(T t);
 
-  // ֱ�Ӹ�һ�����ȣ� ���ص�ǰλ���Ժ�x���ֽ�����
+  // 
   void get_length_mem(char* p, int len) {
-    memcpy(p, m_iodevice.current(), len);
-    m_iodevice.offset(len);
+    std::memcpy(p, io_device_.current(), len);
+    io_device_.offset(len);
   }
 
  public:
@@ -100,17 +94,17 @@ class Serializer {
   }
 
  private:
-  int m_byteorder;
-  StreamBuffer m_iodevice;
+  int byte_order_;
+  StreamBuffer io_device_;
 };
 
 template <typename T>
 inline void Serializer::output_type(T& t) {
   int len = sizeof(T);
   char* d = new char[len];
-  if (!m_iodevice.is_eof()) {
-    memcpy(d, m_iodevice.current(), len);
-    m_iodevice.offset(len);
+  if (!io_device_.is_eof()) {
+    std::memcpy(d, io_device_.current(), len);
+    io_device_.offset(len);
     byte_orser(d, len);
     t = *reinterpret_cast<T*>(&d[0]);
   }
@@ -121,14 +115,14 @@ template <>
 inline void Serializer::output_type(std::string& in) {
   int marklen = sizeof(uint16_t);
   char* d = new char[marklen];
-  memcpy(d, m_iodevice.current(), marklen);
+  std::memcpy(d, io_device_.current(), marklen);
   byte_orser(d, marklen);
   int len = *reinterpret_cast<uint16_t*>(&d[0]);
-  m_iodevice.offset(marklen);
+  io_device_.offset(marklen);
   delete[] d;
   if (len == 0) return;
-  in.insert(in.begin(), m_iodevice.current(), m_iodevice.current() + len);
-  m_iodevice.offset(len);
+  in.insert(in.begin(), io_device_.current(), io_device_.current() + len);
+  io_device_.offset(len);
 }
 
 template <typename T>
@@ -136,25 +130,25 @@ inline void Serializer::input_type(T t) {
   int len = sizeof(T);
   char* d = new char[len];
   const char* p = reinterpret_cast<const char*>(&t);
-  memcpy(d, p, len);
+  std::memcpy(d, p, len);
   byte_orser(d, len);
-  m_iodevice.input(d, len);
+  io_device_.input(d, len);
   delete[] d;
 }
 
 template <>
 inline void Serializer::input_type(std::string in) {
-  // �ȴ����ַ�������
+  // 
   uint16_t len = in.size();
   char* p = reinterpret_cast<char*>(&len);
   byte_orser(p, sizeof(uint16_t));
-  m_iodevice.input(p, sizeof(uint16_t));
+  io_device_.input(p, sizeof(uint16_t));
 
-  // �����ַ���
+  // 
   if (len == 0) return;
   char* d = new char[len];
-  memcpy(d, in.c_str(), len);
-  m_iodevice.input(d, len);
+  std::memcpy(d, in.c_str(), len);
+  io_device_.input(d, len);
   delete[] d;
 }
 
