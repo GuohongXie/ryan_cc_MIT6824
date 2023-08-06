@@ -10,8 +10,9 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
 # 设置编译选项
-set(compile_flags "-g -Wall -std=c++17 -O0")
-set(CMAKE_CXX_FLAGS"${CMAKE_CXX_FLAGS} ${compile_flags}")
+set(compile_flags_release "-Wall -std=c++17 -O2")
+set(compile_flags_debug "-Wall -std=c++17 -O0 -g")
+set(CMAKE_CXX_FLAGS"${CMAKE_CXX_FLAGS} ${compile_flags_release}")
 
 #find_package(Boost REQUIRED)
 #find_library(BOOST_TEST_LIBRARY NAMES boost_unit_test_framework)

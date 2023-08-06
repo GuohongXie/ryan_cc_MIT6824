@@ -5,3 +5,5 @@ void buttonrpc::as_client(const std::string& ip, int port)
 
 
 src/kv_raft/select.h 需要验证正确性
+
+buttonrpc 暂不支持对const函数的传递，需要修改

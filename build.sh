@@ -28,3 +28,9 @@ cp lib/libmr_word_count.so ../src/map_reduce/mrapps/
 cp bin/raft ../src/raft/
 cp bin/kv_raft_server ../src/kv_raft/
 cp bin/kv_raft_client ../src/kv_raft/
+
+# remove middle files (OPTIONAL)
+rm ../src/kv_raft/persister*
+rm ../src/kv_raft/snap_shot*
+rm -f ../src/kv_raft/fifo-*
+rm ../src/raft/persister*
