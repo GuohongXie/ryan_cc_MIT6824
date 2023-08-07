@@ -26,3 +26,6 @@ persister*
 snap_shot*
 mr-out-*
 *.so
+
+# executables
+src/map_reduce/main/mrworker

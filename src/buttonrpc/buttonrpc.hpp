@@ -199,9 +199,19 @@ void buttonrpc::as_server(int port) {
   socket_->bind(os.str());
 }
 
+/*
 void buttonrpc::send(zmq::message_t& data) { socket_->send(data); }
-
 void buttonrpc::recv(zmq::message_t& data) { socket_->recv(&data); }
+*/
+void buttonrpc::send(zmq::message_t& data) {
+  socket_->send(data, zmq::send_flags::none);
+}
+//忽略了recv的返回值，即忽略了recv的异常处理
+void buttonrpc::recv(zmq::message_t& data) {
+    socket_->recv(data, zmq::recv_flags::none);
+}
+
+
 
 inline void buttonrpc::set_timeout(uint32_t ms) {
   // only client can set
@@ -328,6 +338,8 @@ void buttonrpc::extract_args(SerializerType& ds, First& first, Rest&... rest) {
     extract_args(ds, rest...);
 }
 // 原来是七八个callproxy_functional_的重载函数，现在使用可变模板参数的callproxy_functional_函数
+//第一个修改版本不支持cosnt std::string&类型的参数
+/*
 template <typename R, typename... Params>
 void buttonrpc::callproxy_functional_(std::function<R(Params...)> func, Serializer* pr,
                            const char* data, int len) {
@@ -345,6 +357,28 @@ void buttonrpc::callproxy_functional_(std::function<R(Params...)> func, Serializ
     val.set_val(r);
     (*pr) << val;
 }
+*/
+
+//第二个修改版本支持cosnt T&类型的参数, 只改动了tuple的初始化这一行
+// 按需修改这部分来处理const std::string&参数
+template <typename R, typename... Params>
+void buttonrpc::callproxy_functional_(std::function<R(Params...)> func, Serializer* pr,
+                           const char* data, int len) {
+    Serializer ds(StreamBuffer(data, len));
+    std::tuple<std::decay_t<Params>...> args;  // 使用std::decay去除引用和const，确保每个元素可以被构造
+    std::apply([this, &ds](auto&... a) { this->extract_args(ds, a...); }, args); // 将参数从ds中提取出来,并存储在tuple中
+
+    // 使用std::apply调用func
+    typename type_xx<R>::type r = call_helper<R>([&]() {
+        return std::apply(func, args);
+    });
+
+    value_t<R> val;
+    val.set_code(RPC_ERR_SUCCESS);
+    val.set_val(r);
+    (*pr) << val;
+}
+
 
 
 template <typename R>

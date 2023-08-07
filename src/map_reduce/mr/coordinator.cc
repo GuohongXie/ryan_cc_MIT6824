@@ -1,14 +1,17 @@
 #include "map_reduce/mr/coordinator.h"
 
 Coordinator::Coordinator(int map_num, int reduce_num)
-    : done_(false), map_num_(map_num), reduce_num_(reduce_num) {
+    : done_(false), 
+      map_num_(map_num), 
+      reduce_num_(reduce_num),
+      curr_map_index_(0),
+      curr_reduce_index_(0),
+      input_file_num_(0) {
   input_file_name_list_.clear();
   finished_map_task_.clear();
   finished_reduce_task_.clear();
   running_map_work_.clear();
   running_reduce_work_.clear();
-  curr_map_index_ = 0;
-  curr_reduce_index_ = 0;
   if (map_num_ <= 0 || reduce_num_ <= 0) {
     throw std::exception();
   }
@@ -137,7 +140,9 @@ void Coordinator::WaitReduce(int reduce_idx) {
   t.detach();
 }
 
-void Coordinator::SetMapStat(std::string file_name) {
+//这里传引用还是传值是一个值得思考的问题
+//多线程环境中，传引用的前提是该变量不会被修改，否则会出现数据竞争
+void Coordinator::SetMapStat(std::string file_name) { 
   std::lock_guard<std::mutex> lock(mutex_);
   finished_map_task_[file_name] = 1;  //通过worker的RPC调用修改map任务的完成状态
   // printf("map task : %s is finished, maphash is %p\n", file_name.c_str(),
