@@ -7,33 +7,51 @@
 #include <sstream>
 #include <vector>
 
-class StreamBuffer : public std::vector<char> {
- public:
-  StreamBuffer() { curr_pos_ = 0; }
-  StreamBuffer(const char* in, size_t len) {
-    curr_pos_ = 0;
-    insert(begin(), in, in + len);
-  }
-  ~StreamBuffer()= default;
+class StreamBuffer {
+public:
+  StreamBuffer() : curr_pos_(0) {}
+
+  StreamBuffer(const char* in, size_t len) 
+      : buffer_(in, in + len), curr_pos_(0) {}
 
   void reset() { curr_pos_ = 0; }
-  const char* data() { return &(*this)[0]; }
-  const char* current() { return &(*this)[curr_pos_]; }
-  void offset(int k) { curr_pos_ += k; }
-  bool is_eof() { return (curr_pos_ >= size()); }
-  void input(char* in, size_t len) { insert(end(), in, in + len); }
+  const char* data() const { return buffer_.data(); }
+
+  const char* current() const {
+    if(curr_pos_ < buffer_.size()) {
+      return &buffer_[curr_pos_];
+    }
+    return nullptr;
+  }
+  void offset(int k) {
+    curr_pos_ = (curr_pos_ + k < buffer_.size()) ? curr_pos_ + k : buffer_.size();
+  }
+
+  bool is_eof() const { return curr_pos_ >= buffer_.size(); }
+  void input(const char* in, size_t len) { buffer_.insert(buffer_.end(), in, in + len); }
+
   int findc(char c) {
-    auto itr = find(begin() + curr_pos_, end(), c);
-    if (itr != end()) {
-      return static_cast<int>(itr - (begin() + curr_pos_));
+    auto itr = std::find(buffer_.begin() + curr_pos_, buffer_.end(), c);
+    if (itr != buffer_.end()) {
+      return static_cast<int>(itr - buffer_.begin() - curr_pos_);
     }
     return -1;
   }
 
- private:
-  // 
-  unsigned int curr_pos_;
+  void clear() {
+    buffer_.clear();
+    curr_pos_ = 0;
+  }
+
+  size_t size() const { return buffer_.size(); }
+
+private:
+  std::vector<char> buffer_;
+  size_t curr_pos_;
 };
+
+
+
 
 class Serializer {
  public:

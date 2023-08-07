@@ -32,9 +32,6 @@ class buttonrpc {
   template <typename T>
   class value_t {
    public:
-    //typedef typename type_xx<T>::type type;
-    //typedef std::string msg_type;
-    //typedef uint16_t code_type;
     using type = typename type_xx<T>::type;
     using msg_type = std::string;
     using code_type = uint16_t;
