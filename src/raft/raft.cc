@@ -17,49 +17,42 @@ constexpr int HEART_BEART_PERIOD = 100000;
 
 //需要结合LAB3实现应用层dataBase和Raft交互用的，通过getCmd()转化为applyMsg的command
 //实际上这只是LAB2的raft.hpp，在LAB3中改了很多，LAB4又改了不少，所以每个LAB都引了单独的raft.hpp
-class Operation {
- public:
-  std::string GetCmd();
+struct Operation {
+  std::string GetCmd() const {
+    std::string cmd = op + " " + key + " " + value;
+    return cmd;
+  }
 
- public:
   std::string op;
   std::string key;
   std::string value;
-  int client_id;
-  int request_id;
+  int client_id{-1};
+  int request_id{-1};
 };
 
-std::string Operation::GetCmd() {
-  std::string cmd = op + " " + key + " " + value;
-  return cmd;
-}
-
 //通过传入raft.Start()得到的返回值，封装成类
-class StartRet {
- public:
-  StartRet() : cmd_index(-1), curr_term_(-1), is_leader(false) {}
-  int cmd_index;
-  int curr_term_;
-  bool is_leader;
+struct StartRet {
+  int cmd_index{-1};
+  int curr_term_{-1};
+  bool is_leader{false};
 };
 
 //同应用层交互的需要提交到应用层并apply的封装成applyMsg的日志信息
-class ApplyMsg {
-  bool is_command_valid;
+struct ApplyMsg {
+  bool is_command_valid{false};
   std::string command;
-  int command_index;
+  int command_index{-1};
 };
 
 //一个存放当前raft的ID及自己两个RPC端口号的class(为了减轻负担，一个选举，一个日志同步，分开来)
 struct PeersInfo {
   std::pair<int, int> port;
-  int peer_id_;
+  int peer_id_{-1};
 };
 
 //日志
-class LogEntry {
- public:
-  LogEntry(std::string cmd = "", int term_tmp = -1)
+struct LogEntry {
+  explicit LogEntry(std::string cmd = "", int term_tmp = -1)
       : command(cmd), term(term_tmp) {}
   std::string command;
   int term;
@@ -68,22 +61,21 @@ class LogEntry {
 //持久化类，LAB2中需要持久化的内容就这3个，后续会修改
 struct Persister {
   std::vector<LogEntry> logs;
-  int curr_term_;
-  int voted_for_;
+  int curr_term_{-1};
+  int voted_for_{-1};
 };
 
-class AppendEntriesArgs {
- public:
+struct AppendEntriesArgs {
   // AppendEntriesArgs():term(-1), leader_id_(-1), prev_log_index(-1),
   // prev_log_term(-1){
   //     //leader_commit = 0;
   //     send_logs.clear();
   // }
-  int term;
-  int leader_id_;
-  int prev_log_index;
-  int prev_log_term;
-  int leader_commit;
+  int term{-1};
+  int leader_id_{-1};
+  int prev_log_index{-1};
+  int prev_log_term{-1};
+  int leader_commit{0};
   std::string send_logs;
   friend Serializer& operator>>(Serializer& in, AppendEntriesArgs& d) {
     in >> d.term >> d.leader_id_ >> d.prev_log_index >> d.prev_log_term >>
@@ -98,22 +90,22 @@ class AppendEntriesArgs {
 };
 
 struct AppendEntriesReply {
-  int term;
-  bool is_successful;
-  int conflict_term;   //用于冲突时日志快速匹配
-  int conflict_index;  //用于冲突时日志快速匹配
+  int term{-1};
+  bool is_successful{false};
+  int conflict_term{-1};   //用于冲突时日志快速匹配
+  int conflict_index{-1};  //用于冲突时日志快速匹配
 };
 
 struct RequestVoteArgs {
-  int term;
-  int candidate_id;
-  int last_log_term;
-  int last_log_index;
+  int term{-1};
+  int candidate_id{-1};
+  int last_log_term{-1};
+  int last_log_index{-1};
 };
 
 struct RequestVoteReply {
-  int term;
-  bool vote_granted;
+  int term{-1};
+  bool vote_granted{false};
 };
 
 class Raft {
@@ -233,21 +225,6 @@ void Raft::Make(std::vector<PeersInfo> peers, int id) {
   listen_thread3.detach();
 }
 
-/*
-void* Raft::ApplyLogLoop(void* arg){
-    Raft* raft = (Raft*)arg;
-    while(!raft->is_dead_){
-        ::usleep(10000);
-        raft->m_lock.lock();
-        for(int i = raft->last_applied_; i < raft->commit_index_; i++){
-            //  @brief 封装好信息发回给客户端, LAB3中会用
-            //  ApplyMsg msg;
-        }
-        raft->last_applied_ = raft->commit_index_;
-        raft->m_lock.unlock();
-    }
-}
-*/
 void* Raft::ApplyLogLoop(void* arg) {
   // Raft* raft = (Raft*)arg;
   Raft* raft = static_cast<Raft*>(arg);
@@ -294,9 +271,6 @@ void* Raft::ListenForVote(void* arg) {
   server.as_server(raft->peers_[raft->peer_id_].port.first);
   server.bind("RequestVote", &Raft::RequestVote, raft);
 
-  // pthread_t wait_tid;
-  // pthread_create(&wait_tid, nullptr, ElectionLoop, raft);
-  // pthread_detach(wait_tid);
   std::thread election_thread(&Raft::ElectionLoop, raft);
   election_thread.detach();
 
@@ -305,15 +279,11 @@ void* Raft::ListenForVote(void* arg) {
 }
 
 void* Raft::ListenForAppend(void* arg) {
-  // Raft* raft = (Raft*)arg;
   Raft* raft = static_cast<Raft*>(arg);
   buttonrpc server;
   server.as_server(raft->peers_[raft->peer_id_].port.second);
   server.bind("AppendEntries", &Raft::AppendEntries, raft);
 
-  // pthread_t heart_tid;
-  // pthread_create(&heart_tid, nullptr, ProcessEntriesLoop, raft);
-  // pthread_detach(heart_tid);
   std::thread processEntriesThread(&Raft::ProcessEntriesLoop, raft);
   processEntriesThread.detach();
 
@@ -322,13 +292,11 @@ void* Raft::ListenForAppend(void* arg) {
 }
 
 void* Raft::ElectionLoop(void* arg) {
-  // Raft* raft = (Raft*)arg;
   Raft* raft = static_cast<Raft*>(arg);
   bool resetFlag = false;
   while (!raft->is_dead_) {
     int time_out = ::rand() % 200000 + 200000;
     while (true) {
-      //::usleep(1000);
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       std::unique_lock<std::mutex> lock(raft->mutex_);
 
@@ -360,15 +328,6 @@ void* Raft::ElectionLoop(void* arg) {
         //    if(thread.joinable()) {
         //        thread.detach();
         //    }
-        //}
-
-        // pthread_t tid[raft->peers_.size() - 1];
-        // int i = 0;
-        // for(auto server : raft->peers_){
-        //    if(server.peer_id_ == raft->peer_id_) continue;
-        //    pthread_create(tid + i, nullptr, CallRequestVote, raft);
-        //    pthread_detach(tid[i]);
-        //    i++;
         //}
 
         while (raft->recv_votes_ <= raft->peers_.size() / 2 &&
@@ -511,14 +470,6 @@ void* Raft::ProcessEntriesLoop(void* arg) {
     // raft->curr_term_);
     lock.unlock();
 
-    // pthread_t tid[raft->peers_.size() - 1];
-    // int i = 0;
-    // for (auto server : raft->peers_) {
-    //  if (server.peer_id_ == raft->peer_id_) continue;
-    //  pthread_create(tid + i, nullptr, SendAppendEntries, raft);
-    //  pthread_detach(tid[i]);
-    //  i++;
-    //}
     for (const auto& server : raft->peers_) {
       if (server.peer_id_ == raft->peer_id_) continue;
       std::thread(&Raft::SendAppendEntries, raft).detach();
@@ -558,7 +509,6 @@ std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
 void Raft::PushBackLog(LogEntry log) { logs_.push_back(log); }
 
 void* Raft::SendAppendEntries(void* arg) {
-  // Raft* raft = (Raft*)arg;
   Raft* raft = static_cast<Raft*>(arg);
   buttonrpc client;
   AppendEntriesArgs args;
@@ -690,11 +640,6 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
     if (commit_index_ < args.leader_commit) {
       commit_index_ = std::min(args.leader_commit, logSize);
     }
-    // persister_.persist_lock.lock();
-    // persister_.curr_term_ = curr_term_;
-    // persister_.voted_for_ = voted_for_;
-    // persister_.logs = logs_;
-    // persister_.persist_lock.unlock();
     lock.unlock();
     reply.is_successful = true;
     // SaveRaftState();
