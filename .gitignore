@@ -28,4 +28,15 @@ mr-out-*
 *.so
 
 # executables
-src/map_reduce/main/mrworker
+./src/map_reduce/main/mrworker
+mrworker
+mrcoordinator
+raft
+kv_raft_server
+kv_raft_client
+shard_kv_server_a
+shard_kv_server_b
+shard_kv_client_a
+shard_kv_client_b
+shard_kv_test_a 
+shard_kv_test_b
