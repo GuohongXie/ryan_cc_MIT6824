@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "kv_raft/arguments.hpp"
@@ -26,7 +27,7 @@ std::mutex
 
 class Clerk {
  public:
-  Clerk(std::vector<std::vector<int>>& servers);
+  explicit Clerk(std::vector<std::vector<int>>& servers);
   std::string Get(std::string key);  //定义的对于kvServer的get请求
   void Put(std::string key, std::string value);  //定义的对于kvServer的put请求
   void Append(std::string key,
@@ -55,7 +56,7 @@ Clerk::Clerk(std::vector<std::vector<int>>& servers) {
 
 std::string Clerk::Get(std::string key) {
   GetArgs args;
-  args.key = key;
+  args.key = std::move(key);
   args.client_id = client_id_;
   args.request_id = GetCurRequestId();
   int cur_leader = GetCurLeader();
@@ -66,7 +67,7 @@ std::string Clerk::Get(std::string key) {
       EVERY_SERVER_PORT;  //取得某个kvServer的一个RPC监听端口号的索引，一个Server有多个RPC处理客户端请求，取完递增
   lock.unlock();
 
-  while (1) {
+  while (true) {
     buttonrpc client;
     client.as_client("127.0.0.1", servers_[cur_leader][curPort]);
     GetReply reply = client.call<GetReply>("Get", args)
@@ -127,7 +128,7 @@ void Clerk::PutAppend(std::string key, std::string value, std::string op) {
   int curPort = (curr_port_id++) % EVERY_SERVER_PORT;
   lock.unlock();
 
-  while (1) {
+  while (true) {
     buttonrpc client;
     client.as_client("127.0.0.1", servers_[cur_leader][curPort]);
     PutAppendReply reply =
@@ -153,7 +154,7 @@ std::vector<std::vector<int>> GetServerPort(int num) {
 }
 
 int main() {
-  std::srand((unsigned)std::time(NULL));
+  std::srand((unsigned)std::time(nullptr));
   std::vector<std::vector<int>> port = GetServerPort(5);
   // printf("server.size() = %d\n", port.size());
   Clerk clerk(port);
@@ -163,7 +164,7 @@ int main() {
   Clerk clerk5(port);
 
   //-------------------------------------test-------------------------------------
-  while (1) {
+  while (true) {
     clerk.Put("abc", "123");
     std::cout << clerk.Get("abc") << std::endl;
     clerk2.Put("abc", "456");

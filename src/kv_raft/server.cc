@@ -39,9 +39,9 @@ class KVServer {
       void* arg);  //持续监听raft层日志是否超过给定大小，判断进行快照的守护线程
   void StartKvServer(std::vector<KVServerInfo>& kv_info, int me,
                      int maxRaftState);
-  std::vector<PeersInfo> GetRaftPort(std::vector<KVServerInfo>& kv_info);
-  GetReply Get(GetArgs args);
-  PutAppendReply PutAppend(PutAppendArgs args);
+  static std::vector<PeersInfo> GetRaftPort(std::vector<KVServerInfo>& kv_info);
+  GetReply Get(const GetArgs& args);
+  PutAppendReply PutAppend(const PutAppendArgs& args);
 
   std::string Test(std::string key) {
     return database_[key];
@@ -102,7 +102,7 @@ void KVServer::StartKvServer(std::vector<KVServerInfo>& kv_info, int me,
 }
 
 void* KVServer::RPCServer(void* arg) {
-  KVServer* kv = static_cast<KVServer*>(arg);
+  auto* kv = static_cast<KVServer*>(arg); // equals to "auto kv = (KVServer*)arg;"
   buttonrpc server;
   std::unique_lock<std::mutex> lock(kv->mutex_);
   int port = kv->curr_port_id_++;
@@ -115,7 +115,7 @@ void* KVServer::RPCServer(void* arg) {
 }
 
 // PRChandler for Get-request
-GetReply KVServer::Get(GetArgs args) {
+GetReply KVServer::Get(const GetArgs& args) {
   GetReply reply;
   reply.is_wrong_leader = false;
   reply.isKeyExist = true;
@@ -173,8 +173,8 @@ GetReply KVServer::Get(GetArgs args) {
 }
 
 // PRChandler for Put/Append-request
-PutAppendReply KVServer::PutAppend(PutAppendArgs args) {
-  PutAppendReply reply;
+PutAppendReply KVServer::PutAppend(const PutAppendArgs& args) {
+  PutAppendReply reply{};
   reply.is_wrong_leader = false;
   Operation operation;
   operation.op = args.op;
@@ -229,14 +229,14 @@ PutAppendReply KVServer::PutAppend(PutAppendArgs args) {
 }
 
 void* KVServer::ApplyLoop(void* arg) {
-  KVServer* kv = static_cast<KVServer*>(arg);
+  auto* kv = static_cast<KVServer*>(arg);
   while (true) {
     kv->raft_.WaitSendSem();
     ApplyMsg msg = kv->raft_.GetBackMsg();
 
     if (!msg.is_command_valid) {  //为快照处理的逻辑
       std::lock_guard<std::mutex> lock(kv->mutex_);
-      if (msg.snapshot.size() == 0) {
+      if (msg.snapshot.empty()) {
         kv->database_.clear();
         kv->client_seq_map_.clear();
       } else {
@@ -325,9 +325,9 @@ std::string KVServer::GetSnapShot() {
 }
 
 void* KVServer::SnapShotLoop(void* arg) {
-  KVServer* kv = static_cast<KVServer*>(arg);
+  auto* kv = static_cast<KVServer*>(arg);
   while (true) {
-    std::string snapshot = "";
+    std::string snapshot;
     int lastIncluedIndex;
     // printf("%d not in loop -> kv->last_applied_index_ : %d\n", kv->id_,
     // kv->last_applied_index_);
@@ -380,25 +380,25 @@ std::vector<PeersInfo> KVServer::GetRaftPort(
 void KVServer::RecoverySnapShot(std::string snapshot) {
   printf("recovery is called\n");
   std::vector<std::string> str;
-  std::string tmp = "";
+  std::string tmp;
   for (int i = 0; i < snapshot.size(); i++) {
     if (snapshot[i] != ';') {
       tmp += snapshot[i];
     } else {
-      if (tmp.size() != 0) {
+      if (!tmp.empty()) {
         str.push_back(tmp);
         tmp = "";
       }
     }
   }
-  if (tmp.size() != 0) str.push_back(tmp);
+  if (!tmp.empty()) str.push_back(tmp);
   tmp = "";
   std::vector<std::string> kvData, clientSeq;
   for (int i = 0; i < str[0].size(); i++) {
     if (str[0][i] != '.') {
       tmp += str[0][i];
     } else {
-      if (tmp.size() != 0) {
+      if (!tmp.empty()) {
         kvData.push_back(tmp);
         tmp = "";
       }
@@ -408,7 +408,7 @@ void KVServer::RecoverySnapShot(std::string snapshot) {
     if (str[1][i] != '.') {
       tmp += str[1][i];
     } else {
-      if (tmp.size() != 0) {
+      if (!tmp.empty()) {
         clientSeq.push_back(tmp);
         tmp = "";
       }
@@ -474,7 +474,7 @@ int main() {
   }
   ::sleep(5);
   int i = 2;
-  while (1) {
+  while (true) {
     i = rand() % 5;
     if (!kv_servers[i]->GetRaftState()) {
       kv_servers[i]

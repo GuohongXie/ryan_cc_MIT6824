@@ -368,7 +368,7 @@ void* Raft::CallRequestVote(void* arg) {
   args.candidate_id = raft->peer_id_;
   args.term = raft->curr_term_;
   args.last_log_index = raft->logs_.size();
-  args.last_log_term = raft->logs_.size() != 0 ? raft->logs_.back().term : 0;
+  args.last_log_term = !raft->logs_.empty() ? raft->logs_.back().term : 0;
 
   if (raft->curr_peer_id_ == raft->peer_id_) {
     raft->curr_peer_id_++;
@@ -404,7 +404,7 @@ void* Raft::CallRequestVote(void* arg) {
 
 bool Raft::CheckLogUptodate(int term, int index) {
   std::unique_lock<std::mutex> lock(mutex_);
-  if (logs_.size() == 0) {
+  if (logs_.empty()) {
     return true;
   }
   if (term > logs_.back().term) {
@@ -486,7 +486,7 @@ std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
     if (text[i] != ';') {
       tmp += text[i];
     } else {
-      if (tmp.size() != 0) str.push_back(tmp);
+      if (!tmp.empty()) str.push_back(tmp);
       tmp = "";
     }
   }
@@ -532,7 +532,7 @@ void* Raft::SendAppendEntries(void* arg) {
   }
   if (args.prev_log_index == 0) {
     args.prev_log_term = 0;
-    if (raft->logs_.size() != 0) {
+    if (!raft->logs_.empty()) {
       args.prev_log_term = raft->logs_[0].term;
     }
   } else
@@ -631,7 +631,7 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
   // persister_()
 
   int logSize = 0;
-  if (logs_.size() == 0) {
+  if (logs_.empty()) {
     for (const auto& log : recvLog) {
       PushBackLog(log);
     }
@@ -762,12 +762,12 @@ bool Raft::Deserialize() {
   }
   std::string content(buf);
   std::vector<std::string> persist;
-  std::string tmp = "";
-  for (int i = 0; i < content.size(); i++) {
-    if (content[i] != ';') {
-      tmp += content[i];
+  std::string tmp{};
+  for (char c : content) {
+    if (c != ';') {
+      tmp += c;
     } else {
-      if (tmp.size() != 0) persist.push_back(tmp);
+      if (!tmp.empty()) persist.push_back(tmp);
       tmp = "";
     }
   }
@@ -796,7 +796,7 @@ bool Raft::Deserialize() {
     }
     std::string number(log[i].begin() + j + 1, log[i].end());
     int num = std::atoi(number.c_str());
-    logs.push_back(LogEntry(tmp, num));
+    logs.emplace_back(tmp, num);
   }
   this->persister_.logs = logs;
   return true;

@@ -61,7 +61,7 @@ void* Select::Work(void* arg) {
   ::read(fd, buf, sizeof(buf));
   std::unique_lock<std::mutex> lock(select->mutex);
   select->op = '2';
-  select->m_cond.signal();
+  select->cond.notify_one();
 }
 
 void Select::MySelect() {

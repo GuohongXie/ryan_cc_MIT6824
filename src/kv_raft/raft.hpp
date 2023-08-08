@@ -30,11 +30,11 @@ constexpr int HEART_BEART_PERIOD = 100000;
 
 //新增的快照RPC需要传的参数，具体看论文section7关于日志压缩的内容
 struct InstallSnapShotArgs {
-  int term;
-  int leader_id;
-  int last_included_index;
-  int last_included_term;
-  std::string snapshot;
+  int term{};
+  int leader_id{};
+  int last_included_index{};
+  int last_included_term{};
+  std::string snapshot{};
 
   friend Serializer& operator>>(Serializer& in, InstallSnapShotArgs& d) {
     in >> d.term >> d.leader_id >> d.last_included_index >>
@@ -53,39 +53,37 @@ struct InstallSnapSHotReply {
 };
 
 struct Operation {
-  std::string GetCmd();
-  std::string op;
-  std::string key;
-  std::string value;
-  int client_id;
-  int request_id;
-  int term;
-  int index;
+  std::string GetCmd() const {
+    return {op + " " + key + " " + value + " " +
+                      std::to_string(client_id) + " " +
+                      std::to_string(request_id)};
+  }
+  std::string op{};
+  std::string key{};
+  std::string value{};
+  int client_id{};
+  int request_id{};
+  int term{};
+  int index{};
 };
 
-std::string Operation::GetCmd() {
-  std::string cmd = op + " " + key + " " + value + " " +
-                    std::to_string(client_id) + " " +
-                    std::to_string(request_id);
-  return cmd;
-}
+
 
 struct StartRet {
-  StartRet() : cmd_index(-1), curr_term(-1), is_leader(false) {}
-  int cmd_index;
-  int curr_term;
-  bool is_leader;
+  int cmd_index{-1};
+  int curr_term{-1};
+  bool is_leader{false};
 };
 
 struct ApplyMsg {
-  bool is_command_valid;
+  bool is_command_valid{};
   std::string command;
-  int command_index;
-  int command_term;
+  int command_index{};
+  int command_term{};
   Operation GetOperation();
 
-  int last_included_index;
-  int last_included_term;
+  int last_included_index{};
+  int last_included_term{};
   std::string snapshot;
 };
 
@@ -93,15 +91,15 @@ Operation ApplyMsg::GetOperation() {
   Operation operation;
   std::vector<std::string> str;
   std::string tmp;
-  for (int i = 0; i < command.size(); i++) {
-    if (command[i] != ' ') {
-      tmp += command[i];
+  for (char i : command) {
+    if (i != ' ') {
+      tmp += i;
     } else {
-      if (tmp.size() != 0) str.push_back(tmp);
+      if (!tmp.empty()) str.push_back(tmp);
       tmp = "";
     }
   }
-  if (tmp.size() != 0) {
+  if (!tmp.empty()) {
     str.push_back(tmp);
   }
   operation.op = str[0];
@@ -120,7 +118,7 @@ struct PeersInfo {
 };
 
 struct LogEntry {
-  LogEntry(std::string cmd = "", int term = -1)
+  explicit LogEntry(std::string cmd = "", int term = -1)
       : command(cmd), term(term) {}
   std::string command;
   int term;
@@ -135,18 +133,18 @@ struct Persister {
   int last_included_term;
 };
 
-class AppendEntriesArgs {
+struct AppendEntriesArgs {
  public:
   // AppendEntriesArgs():term(-1), leader_id_(-1), prev_log_index(-1),
   // prev_log_term(-1){
   //     //leader_commit = 0;
   //     send_logs.clear();
   // }
-  int term;
-  int leader_id;
-  int prev_log_index;
-  int prev_log_term;
-  int leader_commit;
+  int term{};
+  int leader_id{};
+  int prev_log_index{};
+  int prev_log_term{};
+  int leader_commit{};
   std::string send_logs;
   friend Serializer& operator>>(Serializer& in, AppendEntriesArgs& d) {
     in >> d.term >> d.leader_id >> d.prev_log_index >> d.prev_log_term >>
@@ -160,24 +158,21 @@ class AppendEntriesArgs {
   }
 };
 
-class AppendEntriesReply {
- public:
+struct AppendEntriesReply {
   int term;
   bool success;
   int conflict_term;
   int conflict_index;
 };
 
-class RequestVoteArgs {
- public:
+struct RequestVoteArgs {
   int term;
   int candidate_id;
   int last_log_term;
   int last_log_index;
 };
 
-class RequestVoteReply {
- public:
+struct RequestVoteReply {
   int term;
   bool vote_granted;
 };
@@ -741,26 +736,26 @@ InstallSnapSHotReply Raft::InstallSnapShot(InstallSnapShotArgs args) {
 std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
   std::vector<LogEntry> logs;
   int n = text.size();
-  std::vector<std::string> str;
-  std::string tmp = "";
+  std::vector<std::string> strs;
+  std::string tmp;
   for (int i = 0; i < n; i++) {
     if (text[i] != ';') {
       tmp += text[i];
     } else {
-      if (tmp.size() != 0) str.push_back(tmp);
+      if (!tmp.empty()) strs.push_back(tmp);
       tmp = "";
     }
   }
-  for (int i = 0; i < str.size(); i++) {
+  for (auto & s : strs) {
     tmp = "";
     int j = 0;
-    for (; j < str[i].size(); j++) {
-      if (str[i][j] != ',') {
-        tmp += str[i][j];
+    for (; j < s.size(); j++) {
+      if (s[j] != ',') {
+        tmp += s[j];
       } else
         break;
     }
-    std::string number(str[i].begin() + j + 1, str[i].end());
+    std::string number(s.begin() + j + 1, s.end());
     int num = std::atoi(number.c_str());
     logs.push_back(LogEntry(tmp, num));
   }
@@ -1110,7 +1105,7 @@ bool Raft::Deserialize() {
     if (persist[4][i] != '.') {
       tmp += persist[4][i];
     } else {
-      if (tmp.size() != 0) log.push_back(tmp);
+      if (!tmp.empty()) log.push_back(tmp);
       tmp = "";
     }
   }
@@ -1125,7 +1120,7 @@ bool Raft::Deserialize() {
     }
     std::string number(log[i].begin() + j + 1, log[i].end());
     int num = std::atoi(number.c_str());
-    logs.push_back(LogEntry(tmp, num));
+    logs.emplace_back(tmp, num);
   }
   this->persister_.logs = logs;
   return true;
@@ -1296,7 +1291,7 @@ int Raft::LastIndex() { return last_included_index_ + logs_.size(); }
 
 int Raft::LastTerm() {
   int LastTerm = last_included_term_;
-  if (logs_.size() != 0) {
+  if (!logs_.empty()) {
     LastTerm = logs_.back().term;
   }
   return LastTerm;

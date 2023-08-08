@@ -7,7 +7,7 @@
 
 class Semaphore {
  public:
-  Semaphore(int count = 0) : count_(count) {}
+  explicit Semaphore(int count = 0) : count_(count) {}
 
   inline void Init(int count = 0) { count_ = count; }
 
