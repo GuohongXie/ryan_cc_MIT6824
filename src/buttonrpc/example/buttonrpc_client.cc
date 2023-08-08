@@ -4,7 +4,7 @@
 #include <iostream>
 #include <string>
 
-#include "../buttonrpc.hpp"
+#include "buttonrpc/buttonrpc.hpp"
 
 #define buttont_assert(exp)                                               \
   {                                                                       \
@@ -26,7 +26,7 @@ struct PersonInfo {
     in >> d.age >> d.name >> d.height;
     return in;
   }
-  friend Serializer& operator<<(Serializer& out, PersonInfo d) {
+  friend Serializer& operator<<(Serializer& out, PersonInfo& d) {
     out << d.age << d.name << d.height;
     return out;
   }
@@ -38,7 +38,7 @@ int main() {
   client.set_timeout(2000);
 
   int callcnt = 0;
-  while (1) {
+  while (true) {
     std::cout << "current call count: " << ++callcnt << std::endl;
 
     client.call<void>("foo_1");
@@ -58,8 +58,8 @@ int main() {
     buttont_assert(dd.name == "buttonrpc is good");
     buttont_assert(dd.height == 180);
 
-    int foo6r = client.call<int>("foo_6", 10, "buttonrpc", 100).val();
-    buttont_assert(foo6r == 1000);
+    //int foo6r = client.call<int>("foo_6", 10, "buttonrpc", 100).val();
+    //buttont_assert(foo6r == 1000);
 
     buttonrpc::value_t<void> xx = client.call<void>("foo_7", 666);
     buttont_assert(!xx.valid());

@@ -31,6 +31,11 @@
 },
 {
   "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/buttonrpc_client.dir/src/buttonrpc/example/buttonrpc_client.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/buttonrpc/example/buttonrpc_client.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/buttonrpc/example/buttonrpc_client.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
   "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/shard_kv_test_b.dir/src/shard_kv/test.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/shard_kv/test.cc",
   "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/shard_kv/test.cc"
 },
@@ -58,6 +63,11 @@
   "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
   "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/shard_kv_test_a.dir/src/shard_kv/shard_master/test.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/shard_kv/shard_master/test.cc",
   "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/shard_kv/shard_master/test.cc"
+},
+{
+  "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",
+  "command": "/usr/bin/c++   -I/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src    -std=gnu++17 -o CMakeFiles/buttonrpc_server.dir/src/buttonrpc/example/buttonrpc_server.cc.o -c /home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/buttonrpc/example/buttonrpc_server.cc",
+  "file": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/src/buttonrpc/example/buttonrpc_server.cc"
 },
 {
   "directory": "/home/guohong/mit6824/ryan_lab/ryan_cc_mit_6_824/build",

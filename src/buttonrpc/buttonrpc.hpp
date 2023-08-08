@@ -134,6 +134,10 @@ class buttonrpc {
   void callproxy_func_(R (*func)(Args...), Serializer* pr, const char* data, int len) {
     callproxy_functional_(std::function<R(Args...)>(func), pr, data, len);
   }
+  template <typename R, typename... Args>
+  void callproxy_func_(std::function<R(Args...)> func, Serializer* pr, const char* data, int len) {
+    callproxy_functional_(func, pr, data, len);
+  }
 
 
   // PROXY CLASS MEMBER
@@ -245,7 +249,7 @@ void buttonrpc::run() {
 // private
 
 Serializer* buttonrpc::call_(const std::string& name, const char* data, int len) {
-  Serializer* ds = new Serializer();
+  auto* ds = new Serializer();
   if (name_func_map_.find(name) == name_func_map_.end()) {
     (*ds) << value_t<int>::code_type(RPC_ERR_FUNCTIION_NOT_BIND);
     (*ds) << value_t<int>::msg_type("function not bind: " + name);
@@ -339,26 +343,6 @@ void buttonrpc::extract_args(SerializerType& ds, First& first, Rest&... rest) {
 }
 // 原来是七八个callproxy_functional_的重载函数，现在使用可变模板参数的callproxy_functional_函数
 //第一个修改版本不支持cosnt std::string&类型的参数
-/*
-template <typename R, typename... Params>
-void buttonrpc::callproxy_functional_(std::function<R(Params...)> func, Serializer* pr,
-                           const char* data, int len) {
-    Serializer ds(StreamBuffer(data, len));
-    std::tuple<Params...> args;  // 存储所有参数
-    std::apply([this, &ds](auto&... a) { this->extract_args(ds, a...); }, args);
-
-    // 使用std::apply调用func
-    typename type_xx<R>::type r = call_helper<R>([&]() {
-        return std::apply(func, args);
-    });
-
-    value_t<R> val;
-    val.set_code(RPC_ERR_SUCCESS);
-    val.set_val(r);
-    (*pr) << val;
-}
-*/
-
 //第二个修改版本支持cosnt T&类型的参数, 只改动了tuple的初始化这一行
 // 按需修改这部分来处理const std::string&参数
 template <typename R, typename... Params>

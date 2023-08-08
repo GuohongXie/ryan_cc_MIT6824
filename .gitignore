@@ -42,3 +42,6 @@ src/shard_kv/shard_master/shard_kv_test_a
 src/shard_kv/shard_kv_server_b
 src/shard_kv/shard_kv_client_b
 src/shard_kv/shard_kv_test_b
+
+src/buttonrpc/example/buttonrpc_server
+src/buttonrpc/example/buttonrpc_client

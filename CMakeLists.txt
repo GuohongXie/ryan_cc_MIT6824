@@ -44,6 +44,9 @@ file(GLOB MAIN_SHARD_KV_TEST_A ${PROJECT_SOURCE_DIR}/src/shard_kv/shard_master/t
 file(GLOB MAIN_SHARD_KV_SERVER_B ${PROJECT_SOURCE_DIR}/src/shard_kv/server.cc)
 file(GLOB MAIN_SHARD_KV_CLIENT_B ${PROJECT_SOURCE_DIR}/src/shard_kv/client.cc)
 file(GLOB MAIN_SHARD_KV_TEST_B ${PROJECT_SOURCE_DIR}/src/shard_kv/test.cc)
+## buttonrpc
+file(GLOB MAIN_BUTTONRPC_SERVER ${PROJECT_SOURCE_DIR}/src/buttonrpc/example/buttonrpc_server.cc)
+file(GLOB MAIN_BUTTONRPC_CLIENT ${PROJECT_SOURCE_DIR}/src/buttonrpc/example/buttonrpc_client.cc)
 
 
 # 生成可执行文件
@@ -74,6 +77,11 @@ add_executable(shard_kv_client_b ${MAIN_SHARD_KV_CLIENT_B})
 target_link_libraries(shard_kv_client_b pthread -lzmq)
 add_executable(shard_kv_test_b ${MAIN_SHARD_KV_TEST_B})
 target_link_libraries(shard_kv_test_b pthread -lzmq)
+## buttonrpc
+add_executable(buttonrpc_server ${MAIN_BUTTONRPC_SERVER})
+target_link_libraries(buttonrpc_server pthread -lzmq)
+add_executable(buttonrpc_client ${MAIN_BUTTONRPC_CLIENT})
+target_link_libraries(buttonrpc_client pthread -lzmq)
 
 
 # 设置安装的默认路径

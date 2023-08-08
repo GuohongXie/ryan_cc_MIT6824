@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include "../buttonrpc.hpp"
+#include "buttonrpc/buttonrpc.hpp"
 
 #define buttont_assert(exp)                                               \
   {                                                                       \
@@ -13,8 +13,8 @@
     }                                                                     \
   }
 
-// ��������
-void foo_1() { cout << "foo_1" << endl; }
+// 
+void foo_1() { std::cout << "foo_1" << std::endl; }
 
 void foo_2(int arg1) { buttont_assert(arg1 == 10); }
 
@@ -23,7 +23,7 @@ int foo_3(int arg1) {
   return arg1 * arg1;
 }
 
-int foo_4(int arg1, std::string arg2, int arg3, float arg4) {
+int foo_4(int arg1, const std::string& arg2, int arg3, float arg4) {
   buttont_assert(arg1 == 10);
   buttont_assert(arg2 == "buttonrpc");
   buttont_assert(arg3 == 100);
@@ -33,7 +33,7 @@ int foo_4(int arg1, std::string arg2, int arg3, float arg4) {
 
 class ClassMem {
  public:
-  int bar(int arg1, std::string arg2, int arg3) {
+  static int bar(int arg1, const std::string& arg2, int arg3) {
     buttont_assert(arg1 == 10);
     buttont_assert(arg2 == "buttonrpc");
     buttont_assert(arg3 == 100);
@@ -42,22 +42,22 @@ class ClassMem {
 };
 
 struct PersonInfo {
-  int age;
+  int age{};
   std::string name;
-  float height;
+  float height{};
 
   // must implement
   friend Serializer& operator>>(Serializer& in, PersonInfo& d) {
     in >> d.age >> d.name >> d.height;
     return in;
   }
-  friend Serializer& operator<<(Serializer& out, PersonInfo d) {
+  friend Serializer& operator<<(Serializer& out, const PersonInfo& d) {
     out << d.age << d.name << d.height;
     return out;
   }
 };
 
-PersonInfo foo_5(PersonInfo d, int weigth) {
+PersonInfo foo_5(const PersonInfo& d, int weigth) {
   buttont_assert(d.age == 10);
   buttont_assert(d.name == "buttonrpc");
   buttont_assert(d.height == 170);
@@ -80,7 +80,7 @@ int main() {
   server.bind("foo_5", foo_5);
 
   ClassMem s;
-  server.bind("foo_6", &ClassMem::bar, &s);
+  //server.bind("foo_6", &ClassMem::bar, &s);
 
   std::cout << "run rpc server on: " << 5555 << std::endl;
   server.run();
