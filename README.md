@@ -6,3 +6,4 @@
 用cmake编译mrcoordinator.cc时间，编译时不报错，运行时出现segament fault
 而同样的代码，用g++命令行编译(build_noCmake.sh)则，编译时和运行时都正常使用 
 此bug在2023.08.06解决
+

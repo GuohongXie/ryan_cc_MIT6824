@@ -36,6 +36,7 @@
 struct KeyValue {
   std::string key;
   std::string value;
+  KeyValue(std::string k, std::string v) : key(std::move(k)), value(std::move(v)) {}
 };
 
 using MapFunc = std::vector<KeyValue> (*)(KeyValue);
@@ -54,7 +55,7 @@ class Worker {
   static std::mutex mutex_;
   static std::condition_variable cond_;
 
-  Worker(const std::string& rpc_coordinator_server_ip,  // TODO:容易忘记const
+  Worker(const std::string& rpc_coordinator_server_ip, 
          int rpc_coordinator_server_port,
          int disabled_map_id,     //用于人为让特定map任务超时的Id
          int disabled_reduce_id,  //用于人为让特定reduce任务超时的Id
@@ -73,7 +74,9 @@ class Worker {
         map_task_num_(0),
         reduce_task_num_(0) {}
 
-  ~Worker() {}
+  ~Worker() = default;
+
+  // noncopyable
   Worker(const Worker&) = delete;
   Worker operator=(const Worker&) = delete;
 
@@ -85,8 +88,8 @@ class Worker {
   // std::thread(&Worker::ReduceWorker, &worker, nullptr)
   // while in std::thread style
   // std::thread(&Worker::ReduceWorker, &worker)
-  void RemoveTmpFiles();
-  void RemoveOutputFiles();
+  void RemoveTmpFiles() const ;
+  static void RemoveOutputFiles();
 
   void set_map_task_num(int num) { map_task_num_ = num; }
   void set_reduce_task_num(int num) { reduce_task_num_ = num; }
@@ -94,21 +97,27 @@ class Worker {
   int reduce_task_num() const { return reduce_task_num_; }
 
  private:
-  int Ihash(
-      const std::string& str);  //对每个字符串求hash找到其对应要分配的reduce线程
-  void MyWrite(
-      int fd,
-      std::vector<std::string>& str);  //用于最后写入磁盘的函数，输出最终结果
+  //对每个字符串求hash找到其对应要分配的reduce线程
+  int Ihash(const std::string& str) const;  
+
+  //用于最后写入磁盘的函数，输出最终结果
+  void MyWrite(int fd, std::vector<std::string>& str);  
+
   KeyValue GetContent(const std::string& file_name_str);
-  std::vector<std::string> GetAllfile(
-      const std::string& path, int op);  //获取对应reduce编号的所有中间文件
-  std::vector<KeyValue> MyShuffle(
-      int reduce_task_num);  // vector中每个元素的形式为"abc 11111";
+
+  //获取对应reduce编号的所有中间文件
+  std::vector<std::string> GetAllfile(const std::string& path, int op);  
+
+  // vector中每个元素的形式为"abc 11111";
+  std::vector<KeyValue> MyShuffle(int reduce_task_num);  
+
   void WriteKV(int fd, const KeyValue& kv);
   void WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index);
-  std::vector<std::string> Split(const std::string& text,
-                                 char op);  //以char类型的op为分割拆分字符串
-  std::string Split(const std::string& text);  //以char类型的op为分割拆分字符串
+
+  //以char类型的op为分割拆分字符串
+  std::vector<std::string> Split(const std::string& text, char op);  
+  //以char类型的op为分割拆分字符串
+  std::string Split(const std::string& text);  
 
   int disabled_map_id_;     //用于人为让特定map任务超时的Id
   int disabled_reduce_id_;  //用于人为让特定reduce任务超时的Id
