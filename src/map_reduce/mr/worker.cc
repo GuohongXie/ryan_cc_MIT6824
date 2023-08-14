@@ -1,9 +1,16 @@
 #include "map_reduce/mr/worker.h"
 
 // static member initialsize
-int Worker::map_id_ = 0;
-std::mutex Worker::mutex_;
-std::condition_variable Worker::cond_;
+//int Worker::map_id_ = 0;
+//std::mutex Worker::mutex_;
+//std::condition_variable Worker::cond_;
+
+void Worker::WaitForMapDone() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    while (!is_map_done_) { // 你的实际检查条件
+      cond_.wait(lock);
+    }
+  }
 
 //对每个word(std::string)求hash找到其对应要分配的reduce线程
 int Worker::Ihash(const std::string& str) const {
@@ -197,7 +204,9 @@ void Worker::MapWorker() {
     if (ret) {
       // 如果所有map任务都已经完成，通知coordinator, 并退出MapWorker
       // cond_.notify_all() 会唤醒所有等待在cond_上的线程，此处是唤醒mrworker主线程
-      cond_.notify_all();
+      is_map_done_ = true;
+      NotifyMapDone();
+      //cond_.notify_all();
       return;
     }
     //通过RPC返回值取得任务，在Map中即为要处理的文件名 

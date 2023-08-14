@@ -14,7 +14,12 @@ const std::string RPC_COORDINATOR_SERVER_IP = "127.0.0.1";
 
 int main() {
   //整个程序中只有一个worker实体, 在多线程中共享
-  Worker worker(RPC_COORDINATOR_SERVER_IP, RPC_COORDINATOR_SERVER_PORT, 0, 0, 0,
+  Worker worker(RPC_COORDINATOR_SERVER_IP, 
+                RPC_COORDINATOR_SERVER_PORT,
+                0, 
+                0, 
+                0,
+                0,
                 0);
 
   //运行时从动态库中加载map及reduce函数(根据实际需要的功能加载对应的Func)
@@ -61,12 +66,14 @@ int main() {
     std::thread(&Worker::MapWorker, &worker).detach();
   }
   // TODO:这里为了在类外用类的成员mutex_和cond_，把他们设置成了public，破坏了数据封装的原则
+  //以上已解决，在类封装cond_的相关操作，暴露给外部的只有WaitForMapDone()接口
   // TODO: condition_variable的使用需要结合while循环，否则会出现虚假唤醒
-  std::unique_lock<std::mutex> lock1(Worker::mutex_);
-  while (!worker_client.call<bool>("IsMapDone").val()) {
-    Worker::cond_.wait(lock1);
-  }
-  lock1.unlock();
+  //std::unique_lock<std::mutex> lock1(Worker::mutex_);
+  //while (!worker_client.call<bool>("IsMapDone").val()) {
+  //  Worker::cond_.wait(lock1);
+  //}
+  //lock1.unlock();
+  worker.WaitForMapDone();
 
   // 创建map_task_num个map线程
   for (int i = 0; i < reduce_task_num; i++) {

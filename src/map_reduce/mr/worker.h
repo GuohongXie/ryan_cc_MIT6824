@@ -37,36 +37,39 @@ struct KeyValue {
 using MapFunc = std::vector<KeyValue> (*)(KeyValue);
 using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
 
-class Worker {
+class Worker {  //noncopyable
  public:
   //定义的两个函数指针用于动态加载动态库里的map和reduce函数
   using MapFunc = std::vector<KeyValue> (*)(KeyValue);
   using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
-  MapFunc map_func;
-  ReduceFunc reduce_func;
+  MapFunc map_func{};
+  ReduceFunc reduce_func{};
   static constexpr int MAX_REDUCE_NUM = 15;  //编译器常量
-  // mutex_和cond_要在类外用到, 所以我放在public，暂时没想到更好的设计
-  // 所有的map线程和reduce线程共享一个互斥量，所以锁的粒度要尽可能小
-  static std::mutex mutex_;
-  static std::condition_variable cond_;
+
 
   Worker(const std::string& rpc_coordinator_server_ip, 
          int rpc_coordinator_server_port,
          int disabled_map_id,     //用于人为让特定map任务超时的Id
          int disabled_reduce_id,  //用于人为让特定reduce任务超时的Id
-         int map_task_num, int reduce_task_num)
+         int map_task_num, 
+         int map_id_,
+         int reduce_task_num)
       : kRpcCoordinatorServerIp_(rpc_coordinator_server_ip),
         kRpcCoordinatorServerPort_(rpc_coordinator_server_port),
         disabled_map_id_(disabled_map_id),
         disabled_reduce_id_(disabled_reduce_id),
         map_task_num_(map_task_num),
-        reduce_task_num_(reduce_task_num) {}
+        map_id_(map_id_),
+        reduce_task_num_(reduce_task_num),
+        map_func(nullptr),
+        reduce_func(nullptr) {}
   Worker()
       : kRpcCoordinatorServerIp_("127.0.0.1"),
         kRpcCoordinatorServerPort_(5555),
         disabled_map_id_(0),
         disabled_reduce_id_(0),
         map_task_num_(0),
+        map_id_(0),
         reduce_task_num_(0) {}
 
   ~Worker() = default;
@@ -83,6 +86,9 @@ class Worker {
   // std::thread(&Worker::ReduceWorker, &worker, nullptr)
   // while in std::thread style
   // std::thread(&Worker::ReduceWorker, &worker)
+
+  void WaitForMapDone();
+
   void RemoveTmpFiles() const ;
   static void RemoveOutputFiles();
 
@@ -92,6 +98,9 @@ class Worker {
   int reduce_task_num() const { return reduce_task_num_; }
 
  private:
+  void NotifyMapDone() {
+    cond_.notify_all();
+  }
   //对每个字符串求hash找到其对应要分配的reduce线程
   int Ihash(const std::string& str) const;  
 
@@ -109,23 +118,27 @@ class Worker {
   static void WriteKV(int fd, const KeyValue& kv);
   void WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index);
 
-  //以char类型的op为分割拆分字符串
+  //"word,1 word,1 word,1 ..." -> ["word,1", "word,1", "word,1", ...]
   static std::vector<std::string> Split(const std::string& text, char seporator);  
-  //以char类型的op为分割拆分字符串
+  //"word, 1" -> "word"
   static std::string Split(const std::string& text);  
 
   int disabled_map_id_;     //用于人为让特定map任务超时的Id
   int disabled_reduce_id_;  //用于人为让特定reduce任务超时的Id
   int map_task_num_;  //由coordinator分配，通过main函数的rpc从coordinator获取
   int reduce_task_num_;  //由coordinator分配，通过main函数的rpc从coordinator获取
-  static int map_id_;  //给每个线程分配任务的id，用于写中间文件的命名
+  int map_id_;  //给每个线程分配任务的id，用于写中间文件的命名
+  bool is_map_done_ = false;  //用于判断map任务是否完成
   // const成员函数在构造函数的初始化列表中进行初始化，不能在构造函数的函数体初始化，也不能类内初始化
   // TODO: c++11开始const成员函数可以类内初始化
   //但是需要注意的是一旦在构造函数初始化列表中进行const成员变量的初始化，就不能同时有类内初始化
   //不然编译期错误
-  const std::string kRpcCoordinatorServerIp_;  //因为只有一个coordinator
-  const int
-      kRpcCoordinatorServerPort_;  //所以MapWorker和ReduceWorker共用一个server,故只需指定一个ip和port
+  const std::string kRpcCoordinatorServerIp_;  //MapWorker()和ReduceWorker()共用rpc server
+  const int kRpcCoordinatorServerPort_;  //(coordinator), 故只需指定一个ip和port
+
+  // 所有的map线程和reduce线程共享一个互斥量，所以锁的粒度要尽可能小
+  std::mutex mutex_;
+  std::condition_variable cond_;
 };
 
 #endif  // RYAN_DS_MAP_REDUCE_MR_WORKER_H_
