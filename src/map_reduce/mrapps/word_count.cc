@@ -49,14 +49,15 @@ extern "C" std::vector<KeyValue> MapFunc(const KeyValue& kv) {
 }
 
 /// @brief ReduceFunc，也是动态加载，输出对特定keyValue的reduce结果
-/// @param kvs
-/// @return std::vector<std::string>
+/// @param kvs: {["worda":"11111"], ["wordb":"111"], ["wordc":"1111"], ...}
+/// @return {"5", "3", "4", ...}，每个key对应的value是该key出现的次数
 extern "C" std::vector<std::string> ReduceFunc(const std::vector<KeyValue>& kvs) {
-  // key: a word
-  // value: a list of counts
+  // kvs[0].key: a word
+  // kvs[0].value: a list of counts
   std::vector<std::string> result;
-  for (const auto& kv : kvs) {
-    result.push_back(std::to_string(kv.value.size()));
+  result.reserve(kvs.size());
+for (const auto& kv : kvs) {
+    result.push_back(std::to_string(kv.value.size()));  // count how many "1"
   }
   return result;
 }

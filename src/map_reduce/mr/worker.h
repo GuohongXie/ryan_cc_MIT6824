@@ -1,24 +1,21 @@
 #ifndef RYAN_DS_MAP_REDUCE_MR_WORKER_H_
 #define RYAN_DS_MAP_REDUCE_MR_WORKER_H_
-// TODO:差点忘了头文件保护，写任何头文件的第一步就是写头文件保护
 
-#include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <list>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
-//#include <any>
-#include <cstdio>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <condition_variable>
 
 #include <dirent.h>  //struct dirent* entry;
 #include <dlfcn.h>   //dlopen, dlclose
@@ -28,8 +25,6 @@
 
 #include "buttonrpc/buttonrpc.hpp"
 
-//可能造成的bug，考虑write多次写，每次写1024用while读进buf
-// c_str()返回的是一个临时指针，值传递没事，但若涉及地址出错
 
 //定义实际处理map任务的数组，存放map任务号
 //(map任务大于总文件数时，多线程分配ID不一定分配到正好增序的任务号，如10个map任务，总共8个文件，可能就是0,1,2,4,5,7,8,9)
@@ -49,9 +44,9 @@ class Worker {
   using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
   MapFunc map_func;
   ReduceFunc reduce_func;
-  static constexpr int MAX_REDUCE_NUM = 15;
+  static constexpr int MAX_REDUCE_NUM = 15;  //编译器常量
   // mutex_和cond_要在类外用到, 所以我放在public，暂时没想到更好的设计
-  //所有的map线程和reduce线程共享一个互斥量，所以锁的粒度要尽可能小
+  // 所有的map线程和reduce线程共享一个互斥量，所以锁的粒度要尽可能小
   static std::mutex mutex_;
   static std::condition_variable cond_;
 
@@ -101,23 +96,23 @@ class Worker {
   int Ihash(const std::string& str) const;  
 
   //用于最后写入磁盘的函数，输出最终结果
-  void MyWrite(int fd, std::vector<std::string>& str);  
+  static void MyWrite(int fd, std::vector<std::string>& str);  
 
-  KeyValue GetContent(const std::string& file_name_str);
+  static KeyValue GetContent(const std::string& file_name_str);
 
   //获取对应reduce编号的所有中间文件
-  std::vector<std::string> GetAllfile(const std::string& path, int op);  
+  static std::vector<std::string> GetAllfile(const std::string& directory_str, int reduce_task_index);  
 
   // vector中每个元素的形式为"abc 11111";
-  std::vector<KeyValue> MyShuffle(int reduce_task_num);  
+  static std::vector<KeyValue> MyShuffle(int reduce_task_index);  
 
-  void WriteKV(int fd, const KeyValue& kv);
+  static void WriteKV(int fd, const KeyValue& kv);
   void WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index);
 
   //以char类型的op为分割拆分字符串
-  std::vector<std::string> Split(const std::string& text, char op);  
+  static std::vector<std::string> Split(const std::string& text, char seporator);  
   //以char类型的op为分割拆分字符串
-  std::string Split(const std::string& text);  
+  static std::string Split(const std::string& text);  
 
   int disabled_map_id_;     //用于人为让特定map任务超时的Id
   int disabled_reduce_id_;  //用于人为让特定reduce任务超时的Id

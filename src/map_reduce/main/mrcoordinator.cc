@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
   coordinator.GetAllFile(argc, argv);
   coordinator_server.bind("map_num", &Coordinator::map_num, &coordinator);
   coordinator_server.bind("reduce_num", &Coordinator::reduce_num, &coordinator);
-  coordinator_server.bind("AssignTask", &Coordinator::AssignTask, &coordinator);
+  coordinator_server.bind("AssignMapTask", &Coordinator::AssignMapTask, &coordinator);
   coordinator_server.bind("SetMapStat", &Coordinator::SetMapStat, &coordinator);
   coordinator_server.bind("IsMapDone", &Coordinator::IsMapDone, &coordinator);
   coordinator_server.bind("AssignReduceTask", &Coordinator::AssignReduceTask,

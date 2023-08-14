@@ -5,12 +5,15 @@
 // using MapFunc = std::vector<KeyValue> (*)(KeyValue);
 // using ReduceFunc = std::vector<std::string> (*)(std::vector<KeyValue>, int);
 
-const std::string LIB_CACULATE_PATH_STRING =
-    "../mrapps/libmr_word_count.so";  //用于加载的动态库的路径
+//用于加载的动态库的路径
+const std::string LIB_CACULATE_PATH_STRING = "../mrapps/libmr_word_count.so";  
+//RPC服务端口和IP
 const int RPC_COORDINATOR_SERVER_PORT = 5555;
 const std::string RPC_COORDINATOR_SERVER_IP = "127.0.0.1";
 
+
 int main() {
+  //整个程序中只有一个worker实体, 在多线程中共享
   Worker worker(RPC_COORDINATOR_SERVER_IP, RPC_COORDINATOR_SERVER_PORT, 0, 0, 0,
                 0);
 
@@ -38,11 +41,12 @@ int main() {
   worker_client.as_client(RPC_COORDINATOR_SERVER_IP,
                           RPC_COORDINATOR_SERVER_PORT);
   worker_client.set_timeout(5000);
+
   //获取rpc_coordinator_server提供的map_num和reduce_num并写入worker的成员变量
-  int map_task_num_tmp = worker_client.call<int>("map_num").val();
-  int reduce_task_num_tmp = worker_client.call<int>("reduce_num").val();
-  worker.set_map_task_num(map_task_num_tmp);
-  worker.set_reduce_task_num(reduce_task_num_tmp);
+  int map_task_num = worker_client.call<int>("map_num").val();
+  int reduce_task_num = worker_client.call<int>("reduce_num").val();
+  worker.set_map_task_num(map_task_num);
+  worker.set_reduce_task_num(reduce_task_num);
   worker.RemoveTmpFiles();     //若有，则清理上次输出的中间文件
   worker.RemoveOutputFiles();  //清理上次输出的最终文件
 
@@ -52,20 +56,20 @@ int main() {
   // std::vector<std::thread> map_threads(worker.map_task_num());
   // std::vector<std::thread> reduce_threads(worker.reduce_task_num());
 
-  //貌似不需要以下几行
-  // std::vector<std::thread> map_threads;
-  // map_threads.resize(worker.map_task_num());
-  // std::vector<std::thread> reduce_threads;
-  // reduce_threads.resize(worker.reduce_task_num());
-
-  for (int i = 0; i < map_task_num_tmp; i++) {
+  // 创建map_task_num个map线程
+  for (int i = 0; i < map_task_num; i++) {
     std::thread(&Worker::MapWorker, &worker).detach();
   }
   // TODO:这里为了在类外用类的成员mutex_和cond_，把他们设置成了public，破坏了数据封装的原则
+  // TODO: condition_variable的使用需要结合while循环，否则会出现虚假唤醒
   std::unique_lock<std::mutex> lock1(Worker::mutex_);
-  Worker::cond_.wait(lock1);
+  while (!worker_client.call<bool>("IsMapDone").val()) {
+    Worker::cond_.wait(lock1);
+  }
   lock1.unlock();
-  for (int i = 0; i < reduce_task_num_tmp; i++) {
+
+  // 创建map_task_num个map线程
+  for (int i = 0; i < reduce_task_num; i++) {
     std::thread(&Worker::ReduceWorker, &worker).detach();
   }
 

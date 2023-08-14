@@ -1,8 +1,7 @@
 #include "map_reduce/mr/coordinator.h"
 
 Coordinator::Coordinator(int map_num, int reduce_num)
-    : done_(false), 
-      map_num_(map_num), 
+    : map_num_(map_num), 
       reduce_num_(reduce_num),
       curr_map_index_(0),
       curr_reduce_index_(0),
@@ -20,9 +19,6 @@ Coordinator::Coordinator(int map_num, int reduce_num)
   }
 }
 
-/// @brief get all the source file names(std::string) into input_file_name_list_
-/// @param argc is the number of command line arguments
-/// @param argv is the value of command line arguments
 void Coordinator::GetAllFile(int argc, char* argv[]) {
   for (int i = 1; i < argc; i++) {
     input_file_name_list_.emplace_back(argv[i]);
@@ -31,7 +27,9 @@ void Coordinator::GetAllFile(int argc, char* argv[]) {
 }
 
 // map的worker只需要拿到对应的文件名就可以进行map
-std::string Coordinator::AssignTask() {
+/// @brief 分配map任务的函数，RPC
+/// @return std::string 返回待map的文件名
+std::string Coordinator::AssignMapTask() {
   if (IsMapDone()) return "empty";
   if (!input_file_name_list_.empty()) {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -77,7 +75,7 @@ void* Coordinator::WaitMapTask(void* arg) {
   ++(map->curr_map_index_);
 }
 
-void Coordinator::WaitMap(std::string file_name) {
+void Coordinator::WaitMap(const std::string& file_name) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     running_map_work_.push_back(

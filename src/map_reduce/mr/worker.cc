@@ -56,8 +56,8 @@ KeyValue Worker::GetContent(const std::string& file_name_str) {
 /// @param fd 临时文件的文件描述符, 由WriteInDisk函数传入
 /// @param kv map任务产生的中间值, kv.key为word, kv.value为"1"
 void Worker::WriteKV(int fd, const KeyValue& kv) {
-  std::string tmp = kv.key + "," + kv.value + "\n";
-  int len = ::write(fd, tmp.c_str(), tmp.size());
+  std::string tmp = kv.key + "," + kv.value + " ";
+  ssize_t len = ::write(fd, tmp.c_str(), tmp.size());
   if (len == -1) {
     ::perror("write");
     ::exit(-1);
@@ -86,30 +86,33 @@ void Worker::WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index) {
   }
 }
 
-/// @brief 以char类型的op为分割拆分字符串, 由ReduceWorker函数(线程启动函数)调用
+/// @brief 以char类型的seporator为分割拆分字符串, 由MyShuffle函数调用
 /// @param text 从中间文件读取的字符串, 形式为"word,1 word,1 word,1 ..."
-/// @param op
-/// @return
-std::vector<std::string> Worker::Split(const std::string& text_str, char op) {
+/// @param seporator 分割符, 由ReduceWorker函数(线程启动函数)传入
+/// @return 拆分后的字符串数组, 形式为["word,1", "word,1", "word,1", ...]
+std::vector<std::string> Worker::Split(const std::string& text_str, char seporator) {
   std::string_view text = text_str;
   std::vector<std::string> result;
   size_t start = 0;
-  size_t end = text.find(op);
+  size_t end = text.find(seporator, start);
   while (end != std::string_view::npos) {
     result.emplace_back(text.substr(start, end - start));
     start = end + 1;
-    end = text.find(op, start);
+    end = text.find(seporator, start);
   }
   result.emplace_back(text.substr(start, end));
   return result;
 }
 
-//以逗号为分割拆分字符串
+
+/// @brief 将传入的"word, 1"中的"word"返回，作为MyShuffle函数中umap的key
+/// @param text "word, 1"
+/// @return "word"
 std::string Worker::Split(const std::string& text) {
-  std::string tmp = "";
-  for (int i = 0; i < text.size(); i++) {
-    if (text[i] != ',') {
-      tmp += text[i];
+  std::string tmp;
+  for (char c : text) {
+    if (c != ',') {
+      tmp += c;
     } else
       break;
   }
@@ -121,7 +124,7 @@ std::string Worker::Split(const std::string& text) {
 /// @param op reduce编号
 /// @return 对应reduce编号的所有中间文件
 std::vector<std::string> Worker::GetAllfile(const std::string& directory_str,
-                                            int op) {
+                                            int reduce_task_index) {
   auto directory = std::filesystem::path(directory_str);
   std::vector<std::string> ret;
   if (!std::filesystem::is_directory(directory)) {
@@ -132,7 +135,7 @@ std::vector<std::string> Worker::GetAllfile(const std::string& directory_str,
   for (const auto& entry : std::filesystem::directory_iterator(directory)) {
     std::string filename = entry.path().filename().string();
     std::string prefix = "mr-";
-    std::string suffix = "-" + std::to_string(op);
+    std::string suffix = "-" + std::to_string(reduce_task_index);
     if (filename.compare(0, prefix.size(), prefix) == 0 &&
         filename.compare(filename.size() - suffix.size(), suffix.size(),
                          suffix) == 0) {
@@ -144,22 +147,32 @@ std::vector<std::string> Worker::GetAllfile(const std::string& directory_str,
 
 //对于一个ReduceTask，获取所有相关文件并将value的list以string写入vector
 // vector中每个元素的形式为"abc 11111";
-std::vector<KeyValue> Worker::MyShuffle(int reduce_task_num) {
-  auto filenames = GetAllfile(".", reduce_task_num);
-  std::unordered_map<std::string, std::string> hash;
-  std::vector<std::string> strs;
-  for (const auto& text : filenames) {
-    auto kv = GetContent(text);
-    auto context = kv.value;
-    auto ret_str = Split(context, ' ');
-    strs.insert(strs.end(), ret_str.begin(), ret_str.end());
+
+/// @brief 对于一个ReduceTask，获取所有相关文件并将value的list以string写入vector
+/// 此函数由ReduceWorker函数(线程启动函数)调用
+/// @param reduce_task_index reduce编号
+/// @return {["worda":"11111"], ["wordb":"111"], ["wordc":"1111"], ...}
+/// 其中，key为word, value为"11111"
+std::vector<KeyValue> Worker::MyShuffle(int reduce_task_index) {
+  std::vector<std::string> filenames = GetAllfile(".", reduce_task_index);
+  std::unordered_map<std::string, std::string> umap;
+  // umap: "word" -> "11111..."
+  std::vector<std::string> all_contents;
+  // all_contents: ["worda, 1", "worda, 1", "wordb, 1", "wordb, 1", ...]
+  for (const auto& filename : filenames) {
+    KeyValue kv = GetContent(filename); // key:filename, value:file content
+    // content: "word,1 word,1 word,1 ..."
+    std::string content = kv.value;
+    auto ret_str = Split(content, ' ');
+    all_contents.insert(all_contents.end(), ret_str.begin(), ret_str.end());
   }
-  for (const auto& a : strs) {
-    hash[Split(a)] += "1";
+  for (const auto& s : all_contents) {
+    umap[Split(s)] += "1";
   }
   std::vector<KeyValue> ret_kvs;
-  for (const auto& a : hash) {
-    ret_kvs.push_back({a.first, a.second});
+  ret_kvs.reserve(umap.size());
+  for (const auto& it : umap) {
+    ret_kvs.emplace_back(it.first, it.second);
   }
   std::sort(ret_kvs.begin(), ret_kvs.end(),
             [](const KeyValue& kv1, const KeyValue& kv2) {
@@ -183,14 +196,14 @@ void Worker::MapWorker() {
     bool ret = map_worker_client.call<bool>("IsMapDone").val();
     if (ret) {
       // 如果所有map任务都已经完成，通知coordinator, 并退出MapWorker
-      // cond_.notify_all() 会唤醒所有等待在cond_上的线程，此处是唤醒coordinator
+      // cond_.notify_all() 会唤醒所有等待在cond_上的线程，此处是唤醒mrworker主线程
       cond_.notify_all();
       return;
     }
     //通过RPC返回值取得任务，在Map中即为要处理的文件名 
     // map_task_name 是文件名，如 "pg-being_ernest.txt"
     // map_task_name = "empty" 表示没有任务，继续等待
-    std::string map_task_name = map_worker_client.call<std::string>("AssignTask").val();
+    std::string map_task_name = map_worker_client.call<std::string>("AssignMapTask").val();
     if (map_task_name == "empty") continue;
     std::cout << "MapWorker " << map_task_index << " get task: " << map_task_name << std::endl;
 
@@ -273,16 +286,25 @@ void Worker::ReduceWorker() {
 
     //取得reduce任务，读取对应文件，shuffle后调用reduceFunc进行reduce处理
     std::vector<KeyValue> kvs = MyShuffle(reduce_task_index);
-    std::vector<std::string> ret_strs = reduce_func(kvs, reduce_task_index);
-    std::vector<std::string> strs;
+    // MyShuffle将reduce_task_index对应的文件读取到kvs中
+    // reduce_task_index对应哪些文件，在MapWorker中由Ihash得到
+    // 故相同的word会被分配到相同的文件中
+    // MyShuffle根据reduce_task_index找到对应的文件名,然后读取文件内容
+    // 文件内容为 "worda,1 worda,1 wordb,1 wordc,1 ..."
+    // MyShuffle 将所有文件内容合并，并排序到一个vector中，形式为
+    // kvs : {["worda":"11111"], ["wordb":"111"], ["wordc":"1111"], ...}
+    std::vector<std::string> occurance = reduce_func(kvs, reduce_task_index);
+    // occurance : {"5", "3", "4", ...}
+    std::vector<std::string> word_and_occurance;
+    // word_and_occurance : {"worda 5", "wordb 3", "wordc 4", ...}
     for (size_t i = 0; i < kvs.size(); i++) {
-      strs.push_back(kvs[i].key + " " + ret_strs[i]);
+      word_and_occurance.push_back(kvs[i].key + " " + occurance[i]);
     }
 
     //最终文件写入磁盘并发起RPCcall修改reduce状态
     std::string filename = "mr-out-" + std::to_string(reduce_task_index);
     int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0664);
-    MyWrite(fd, strs);
+    MyWrite(fd, word_and_occurance);
     ::close(fd);
 
     std::cout << "ReduceWorker " << reduce_task_index << " is done on thread: "
