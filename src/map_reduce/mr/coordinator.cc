@@ -30,47 +30,16 @@ std::string Coordinator::AssignMapTask() {
   if (IsMapDone()) return "empty";
   if (!input_file_name_list_.empty()) {
     std::unique_lock<std::mutex> lock(mutex_);
-    std::string task =
-        input_file_name_list_.back();  //从工作队列取出一个待map的文件名
+    std::string task = input_file_name_list_.back();  //从工作队列取出一个待map的文件名
     input_file_name_list_.pop_back();
     lock.unlock();
-    WaitMap(
-        task);  //调用waitMap将取出的任务加入正在运行的map任务队列并等待计时线程
+    WaitMap(task);  //调用waitMap将取出的任务加入正在运行的map任务队列并等待计时线程
     return task;
   }
   return "empty";
 }
 
-void* Coordinator::WaitMapTask(void* arg) {
-  auto map = static_cast<Coordinator*>(arg);
-  std::thread tid([&]() {
-    char op = 'm';
-    WaitTime(&op);
-  });
-  tid.join();  // join方式回收实现超时后解除阻塞
-  std::unique_lock<std::mutex> lock(map->mutex_);
-  //若超时后在对应的hashmap中没有该map任务完成的记录，重新将该任务加入工作队列
-  if (!map->finished_map_task_.count(
-          map->running_map_work_[map->curr_map_index_])) {
-    printf("file_name : %s is timeout\n",
-           map->running_map_work_[map->curr_map_index_].c_str());
-    // char text[map->running_map_work_[map->curr_map_index_].size() + 1];
-    // strcpy(text, map->running_map_work_[map->curr_map_index_].c_str());
-    // printf("text is %s\n", text);
-    // 打印正常的，该线程结束后text就变成空字符串了
-    const std::string& text =
-        map->running_map_work_
-            [map->curr_map_index_];  //这钟方式加入list后不会变成空字符串
-    map->input_file_name_list_.push_back(text);
-    map->curr_map_index_++;
-    lock.unlock();
-    return nullptr;
-  }
-  printf("file_name : %s is finished at idx : %d\n",
-         map->running_map_work_[map->curr_map_index_].c_str(),
-         map->curr_map_index_);
-  ++(map->curr_map_index_);
-}
+
 
 void Coordinator::WaitMap(const std::string& file_name) {
   {
@@ -83,45 +52,60 @@ void Coordinator::WaitMap(const std::string& file_name) {
   t.detach();
 }
 
+void Coordinator::WaitMapTask() {
+  std::thread tid([]() { WaitTime('m'); });
+  tid.join();  // join方式回收实现超时后解除阻塞
+  std::unique_lock<std::mutex> lock(mutex_);
+  //若超时后在对应的hashmap中没有该map任务完成的记录，重新将该任务加入工作队列
+  if (!finished_map_task_.count(running_map_work_[curr_map_index_])) {
+    printf("file_name : %s is timeout\n", running_map_work_[curr_map_index_].c_str());
+    // char text[map->running_map_work_[map->curr_map_index_].size() + 1];
+    // strcpy(text, map->running_map_work_[map->curr_map_index_].c_str());
+    // printf("text is %s\n", text);
+    // 打印正常的，该线程结束后text就变成空字符串了
+    const std::string& text = running_map_work_[curr_map_index_];  //这钟方式加入list后不会变成空字符串
+    input_file_name_list_.push_back(text);
+    curr_map_index_++;
+    lock.unlock();
+    return;
+  }
+  printf("file_name : %s is finished at idx : %d\n", running_map_work_[curr_map_index_].c_str(), curr_map_index_);
+  ++curr_map_index_;
+}
+
+
+
 //分map任务还是reduce任务进行不同时间计时的计时线程
-void* Coordinator::WaitTime(void* arg) {
-  char* op = static_cast<char*>(arg);
-  if (*op == 'm') {
+void Coordinator::WaitTime(const char& map_or_reduce_tag) {
+  if (map_or_reduce_tag == 'm') {
     ::sleep(MAP_TASK_TIMEOUT);
-  } else if (*op == 'r') {
+  } else if (map_or_reduce_tag == 'r') {
     ::sleep(REDUCE_TASK_TIMEOUT);
   }
 }
 
-void* Coordinator::WaitReduceTask(void* arg) {
-  auto reduce = static_cast<Coordinator*>(arg);
+
+void Coordinator::WaitReduceTask() {
   void* status;
-  std::thread t([&]() {
-    char op = 'r';
-    WaitTime(&op);
-  });
+  std::thread t([]() { WaitTime('r'); });
   t.join();
-  std::unique_lock<std::mutex> lock(reduce->mutex_);
+  std::unique_lock<std::mutex> lock(mutex_);
   //若超时后在对应的hashmap中没有该reduce任务完成的记录，将该任务重新加入工作队列
-  if (!reduce->finished_reduce_task_.count(
-          reduce->running_reduce_work_[reduce->curr_reduce_index_])) {
-    for (const auto& str : reduce->input_file_name_list_) {
+  if (!finished_reduce_task_.count(running_reduce_work_[curr_reduce_index_])) {
+    for (const auto& str : input_file_name_list_) {
       printf(" before insert %s\n", str.c_str());
     }
-    reduce->reduce_index_.emplace_back(
-        reduce->running_reduce_work_[reduce->curr_reduce_index_]);
-    printf("%d reduce is timeout\n",
-           reduce->running_reduce_work_[reduce->curr_reduce_index_]);
-    (reduce->curr_reduce_index_)++;
-    for (const auto& str : reduce->input_file_name_list_) {
+    reduce_index_.emplace_back(running_reduce_work_[curr_reduce_index_]);
+    printf("%d reduce is timeout\n", running_reduce_work_[curr_reduce_index_]);
+    curr_reduce_index_++;
+    for (const auto& str : input_file_name_list_) {
       printf(" after insert %s\n", str.c_str());
     }
     lock.unlock();
-    return nullptr;
+    return;
   }
-  printf("%d reduce is completed\n",
-         reduce->running_reduce_work_[reduce->curr_reduce_index_]);
-  reduce->curr_reduce_index_++;
+  printf("%d reduce is completed\n", running_reduce_work_[curr_reduce_index_]);
+  curr_reduce_index_++;
 }
 
 void Coordinator::WaitReduce(int reduce_idx) {
@@ -137,7 +121,7 @@ void Coordinator::WaitReduce(int reduce_idx) {
 
 //这里传引用还是传值是一个值得思考的问题
 //多线程环境中，传引用的前提是该变量不会被修改，否则会出现数据竞争
-void Coordinator::SetMapStat(std::string file_name) { 
+void Coordinator::SetAMapTaskFinished(const std::string& file_name) { 
   std::lock_guard<std::mutex> lock(mutex_);
   finished_map_task_[file_name] = 1;  //通过worker的RPC调用修改map任务的完成状态
   // printf("map task : %s is finished, maphash is %p\n", file_name.c_str(),
@@ -167,7 +151,7 @@ int Coordinator::AssignReduceTask() {
   return -1;
 }
 
-void Coordinator::SetReduceStat(int task_index) {
+void Coordinator::SetAReduceTaskFinished(int task_index) {
   std::lock_guard<std::mutex> lock(mutex_);
   finished_reduce_task_[task_index] = 1;  //通过worker的RPC调用修改reduce任务的完成状态
   // printf(" reduce task%d is finished, reducehash is %p\n", task_index,

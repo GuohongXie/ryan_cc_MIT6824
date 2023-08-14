@@ -244,7 +244,7 @@ void Worker::MapWorker() {
 
     // 5、发送RPC给master告知任务已完成
     std::cout << "MapWorker " << map_task_index << " finish task: " << map_task_name << std::endl;  // 相当于打印日志log
-    map_worker_client.call<void>("SetMapStat", map_task_name);
+    map_worker_client.call<void>("SetAMapTaskFinished", map_task_name);
   }
 }
 
@@ -273,8 +273,7 @@ void Worker::ReduceWorker() {
     bool ret = reduce_worker_client.call<bool>("IsAllMapAndReduceDone").val();
     if (ret) return;
 
-    int reduce_task_index =
-        reduce_worker_client.call<int>("AssignReduceTask").val();
+    int reduce_task_index = reduce_worker_client.call<int>("AssignReduceTask").val();
     // 如果没有任务，继续循环
     if (reduce_task_index == -1) continue;
     std::cout << "ReduceWorker " << reduce_task_index << " is working on thread: "
@@ -321,7 +320,7 @@ void Worker::ReduceWorker() {
 
     std::cout << "ReduceWorker " << reduce_task_index << " is done on thread: "
               << std::this_thread::get_id() << std::endl;
-    reduce_worker_client.call<bool>("SetReduceStat", reduce_task_index);
+    reduce_worker_client.call<bool>("SetAReduceTaskFinished", reduce_task_index);
   }
 }
 

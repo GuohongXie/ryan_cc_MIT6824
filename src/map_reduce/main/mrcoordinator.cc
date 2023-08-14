@@ -20,11 +20,11 @@ int main(int argc, char* argv[]) {
   coordinator_server.bind("map_num", &Coordinator::map_num, &coordinator);
   coordinator_server.bind("reduce_num", &Coordinator::reduce_num, &coordinator);
   coordinator_server.bind("AssignMapTask", &Coordinator::AssignMapTask, &coordinator);
-  coordinator_server.bind("SetMapStat", &Coordinator::SetMapStat, &coordinator);
+  coordinator_server.bind("SetAMapTaskFinished", &Coordinator::SetAMapTaskFinished, &coordinator);
   coordinator_server.bind("IsMapDone", &Coordinator::IsMapDone, &coordinator);
   coordinator_server.bind("AssignReduceTask", &Coordinator::AssignReduceTask,
                           &coordinator);
-  coordinator_server.bind("SetReduceStat", &Coordinator::SetReduceStat,
+  coordinator_server.bind("SetAReduceTaskFinished", &Coordinator::SetAReduceTaskFinished,
                           &coordinator);
   coordinator_server.bind("IsAllMapAndReduceDone",
                           &Coordinator::IsAllMapAndReduceDone, &coordinator);
