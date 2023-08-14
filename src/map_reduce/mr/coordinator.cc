@@ -6,11 +6,6 @@ Coordinator::Coordinator(int map_num, int reduce_num)
       curr_map_index_(0),
       curr_reduce_index_(0),
       input_file_num_(0) {
-  input_file_name_list_.clear();
-  finished_map_task_.clear();
-  finished_reduce_task_.clear();
-  running_map_work_.clear();
-  running_reduce_work_.clear();
   if (map_num_ <= 0 || reduce_num_ <= 0) {
     throw std::exception();
   }
@@ -19,6 +14,9 @@ Coordinator::Coordinator(int map_num, int reduce_num)
   }
 }
 
+/// @brief 从argv[]中获取待处理的文件名, 存入input_file_name_list_
+/// "mr_coordinator input_file_name_1 input_file_name_2 ..."
+/// "mrcoordinator pg-*.txt"
 void Coordinator::GetAllFile(int argc, char* argv[]) {
   for (int i = 1; i < argc; i++) {
     input_file_name_list_.emplace_back(argv[i]);
@@ -26,7 +24,6 @@ void Coordinator::GetAllFile(int argc, char* argv[]) {
   input_file_num_ = argc - 1;
 }
 
-// map的worker只需要拿到对应的文件名就可以进行map
 /// @brief 分配map任务的函数，RPC
 /// @return std::string 返回待map的文件名
 std::string Coordinator::AssignMapTask() {

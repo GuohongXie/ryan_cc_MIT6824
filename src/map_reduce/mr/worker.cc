@@ -1,10 +1,13 @@
 #include "map_reduce/mr/worker.h"
 
-// static member initialsize
-//int Worker::map_id_ = 0;
-//std::mutex Worker::mutex_;
-//std::condition_variable Worker::cond_;
+// static member variable initialsize
 
+
+// 在mrworker的main线程中调用，用阻塞的方式等待所有map任务完成
+// 因为当所有map task都完成之后，才能开始reduce任务
+// 注意map task 和 map的工作线程是两个不同的概念
+// map的工作线程负责处理一个map task，当线程超时时, 
+//coordinator会将该map task重新分配给其他worker
 void Worker::WaitForMapDone() {
     std::unique_lock<std::mutex> lock(mutex_);
     while (!is_map_done_) { // 你的实际检查条件

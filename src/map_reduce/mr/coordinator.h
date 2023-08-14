@@ -37,16 +37,16 @@ class Coordinator {
   static constexpr int REDUCE_TASK_TIMEOUT = 5;
 
   std::mutex mutex_;
-  std::list<std::string> input_file_name_list_;  //所有map任务的工作队列
+  std::list<std::string> input_file_name_list_{};  //所有map任务的工作队列
   int input_file_num_;  //从命令行读取到的文件总数
   int map_num_;
   int reduce_num_;
-  std::unordered_map<std::string, int> finished_map_task_;  //input_file_name : map_index
-  std::unordered_map<int, int> finished_reduce_task_;  //存放所有完成的reduce任务对应的reduce编号
-  std::vector<int> reduce_index_;  //所有reduce任务的工作队列
+  std::unordered_map<std::string, int> finished_map_task_{};  //input_file_name : map_index
+  std::unordered_map<int, int> finished_reduce_task_{};  //存放所有完成的reduce任务对应的reduce编号
+  std::vector<int> reduce_index_{};  //所有reduce任务的工作队列
 
-  int curr_map_index_;    //当前处理第几个map任务
-  int curr_reduce_index_;  //当前处理第几个reduce任务
+  int curr_map_index_{0};    //当前处理第几个map任务
+  int curr_reduce_index_{0};  //当前处理第几个reduce任务
 
   //正在处理的map任务，分配出去就加到这个队列，用于判断超时处理重发
   std::vector<std::string> running_map_work_;  

@@ -14,13 +14,13 @@ const std::string RPC_COORDINATOR_SERVER_IP = "127.0.0.1";
 
 int main() {
   //整个程序中只有一个worker实体, 在多线程中共享
+  //构造worker的初始值怎么设置无所谓，因为后面会通过rpc获取真实的map_num和reduce_num
   Worker worker(RPC_COORDINATOR_SERVER_IP, 
                 RPC_COORDINATOR_SERVER_PORT,
-                0, 
-                0, 
-                0,
-                0,
-                0);
+                0, //disabled_map_id
+                0, //disabled_reduce_id
+                0); //map_id
+                
 
   //运行时从动态库中加载map及reduce函数(根据实际需要的功能加载对应的Func)
   void* handle = dlopen(LIB_CACULATE_PATH_STRING.c_str(), RTLD_LAZY);
