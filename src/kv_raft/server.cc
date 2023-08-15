@@ -10,8 +10,8 @@
 #include <mutex>
 #include <string>
 #include <thread>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "kv_raft/arguments.hpp"
@@ -102,7 +102,8 @@ void KVServer::StartKvServer(std::vector<KVServerInfo>& kv_info, int me,
 }
 
 void* KVServer::RPCServer(void* arg) {
-  auto* kv = static_cast<KVServer*>(arg); // equals to "auto kv = (KVServer*)arg;"
+  auto* kv =
+      static_cast<KVServer*>(arg);  // equals to "auto kv = (KVServer*)arg;"
   buttonrpc server;
   std::unique_lock<std::mutex> lock(kv->mutex_);
   int port = kv->curr_port_id_++;

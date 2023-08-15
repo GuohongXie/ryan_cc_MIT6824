@@ -58,8 +58,8 @@ int main() {
     buttont_assert(dd.name == "buttonrpc is good");
     buttont_assert(dd.height == 180);
 
-    //int foo6r = client.call<int>("foo_6", 10, "buttonrpc", 100).val();
-    //buttont_assert(foo6r == 1000);
+    // int foo6r = client.call<int>("foo_6", 10, "buttonrpc", 100).val();
+    // buttont_assert(foo6r == 1000);
 
     buttonrpc::value_t<void> xx = client.call<void>("foo_7", 666);
     buttont_assert(!xx.valid());

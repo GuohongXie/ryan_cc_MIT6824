@@ -1,1 +1,5 @@
 1. 统一输入输出流，比如用谷歌开源库的类似于std::format的
+2. 区分task和worker，task在任务队列中，此处语境下，task是要处理的文件(名字), worker是工作线程
+3. static memfunc 和 static memvar 的语义有很大区别，
+   static memfunc 表明函数不对类的成员变量进行操作，或者只对static memvar操作。
+   static memvar则表示由类的所有对象所共享的状态或量。

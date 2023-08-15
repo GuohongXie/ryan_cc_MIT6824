@@ -11,7 +11,6 @@
 #include <mutex>
 #include <thread>
 
-
 class Select {
  public:
   Select(std::string fifo_name);

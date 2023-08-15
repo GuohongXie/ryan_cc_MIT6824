@@ -2,18 +2,17 @@
 
 // static member variable initialsize
 
-
 // 在mrworker的main线程中调用，用阻塞的方式等待所有map任务完成
 // 因为当所有map task都完成之后，才能开始reduce任务
 // 注意map task 和 map的工作线程是两个不同的概念
-// map的工作线程负责处理一个map task，当线程超时时, 
-//coordinator会将该map task重新分配给其他worker
+// map的工作线程负责处理一个map task，当线程超时时,
+// coordinator会将该map task重新分配给其他worker
 void Worker::WaitForMapDone() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    while (!is_map_done_) { // 你的实际检查条件
-      cond_.wait(lock);
-    }
+  std::unique_lock<std::mutex> lock(mutex_);
+  while (!is_map_done_) {  // 你的实际检查条件
+    cond_.wait(lock);
   }
+}
 
 //对每个word(std::string)求hash找到其对应要分配的reduce线程
 int Worker::Ihash(const std::string& str) const {
@@ -21,7 +20,7 @@ int Worker::Ihash(const std::string& str) const {
   for (auto c : str) {
     sum += (c - '0');
   }
-  return sum % reduce_task_num_;
+  return sum % reduce_worker_num_;
 }
 
 /// @brief 删除所有写入中间值的临时文件
@@ -29,8 +28,8 @@ int Worker::Ihash(const std::string& str) const {
 /// 临时文件命名格式为"mr-i-j"
 /// 其中i为map_task_index, j为reduce_task_index
 void Worker::RemoveTmpFiles() const {
-  for (int i = 0; i < map_task_num_; i++) {
-    for (int j = 0; j < reduce_task_num_; j++) {
+  for (int i = 0; i < map_worker_num_; i++) {
+    for (int j = 0; j < reduce_worker_num_; j++) {
       std::string file_path_str =
           "mr-" + std::to_string(i) + "-" + std::to_string(j);
       std::filesystem::path file_path(
@@ -75,15 +74,18 @@ void Worker::WriteKV(int fd, const KeyValue& kv) {
   ::close(fd);
 }
 
-/// @brief 创建每个map任务对应的不同reduce号的中间文件并调用WriteKV写入磁盘, 由MapWorker函数(线程启动函数)调用
+/// @brief 创建每个map任务对应的不同reduce号的中间文件并调用WriteKV写入磁盘,
+/// 由MapWorker函数(线程启动函数)调用
 /// @param kvs map_func产生的输出, 即key:word, value:"1"
-/// @param map_task_index 线程所对应的map_task_index，由MapWorker函数(线程启动函数)确定并传进参数于此
-void Worker::WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index) {
+/// @param map_worker_index
+/// 线程所对应的map_task_index，由MapWorker函数(线程启动函数)确定并传进参数于此
+void Worker::WriteInDisk(const std::vector<KeyValue>& kvs,
+                         int map_worker_index) {
   for (const auto& kv : kvs) {
     int reduce_task_index =
         Ihash(kv.key);  // reduce_task_index由kv.key的Ihash决定
     std::string path;
-    path = "mr-" + std::to_string(map_task_index) + "-" +
+    path = "mr-" + std::to_string(map_worker_index) + "-" +
            std::to_string(reduce_task_index);
     int ret = ::access(path.c_str(), F_OK);
     if (ret == -1) {
@@ -100,7 +102,8 @@ void Worker::WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index) {
 /// @param text 从中间文件读取的字符串, 形式为"word,1 word,1 word,1 ..."
 /// @param seporator 分割符, 由ReduceWorker函数(线程启动函数)传入
 /// @return 拆分后的字符串数组, 形式为["word,1", "word,1", "word,1", ...]
-std::vector<std::string> Worker::Split(const std::string& text_str, char seporator) {
+std::vector<std::string> Worker::Split(const std::string& text_str,
+                                       char seporator) {
   std::string_view text = text_str;
   std::vector<std::string> result;
   size_t start = 0;
@@ -113,7 +116,6 @@ std::vector<std::string> Worker::Split(const std::string& text_str, char seporat
   result.emplace_back(text.substr(start, end));
   return result;
 }
-
 
 /// @brief 将传入的"word, 1"中的"word"返回，作为MyShuffle函数中umap的key
 /// @param text "word, 1"
@@ -129,7 +131,8 @@ std::string Worker::Split(const std::string& text) {
   return tmp;
 }
 
-/// @brief 获取对应reduce编号的所有中间文件, 由ReduceWorker函数(线程启动函数)调用
+/// @brief 获取对应reduce编号的所有中间文件,
+/// 由ReduceWorker函数(线程启动函数)调用
 /// @param directory_str  中间文件所在的目录
 /// @param op reduce编号
 /// @return 对应reduce编号的所有中间文件
@@ -170,7 +173,7 @@ std::vector<KeyValue> Worker::MyShuffle(int reduce_task_index) {
   std::vector<std::string> all_contents;
   // all_contents: ["worda, 1", "worda, 1", "wordb, 1", "wordb, 1", ...]
   for (const auto& filename : filenames) {
-    KeyValue kv = GetContent(filename); // key:filename, value:file content
+    KeyValue kv = GetContent(filename);  // key:filename, value:file content
     // content: "word,1 word,1 word,1 ..."
     std::string content = kv.value;
     auto ret_str = Split(content, ' ');
@@ -191,14 +194,13 @@ std::vector<KeyValue> Worker::MyShuffle(int reduce_task_index) {
   return ret_kvs;
 }
 
-
 void Worker::MapWorker() {
   // 1、初始化client连接用于后续RPC;获取自己唯一的MapTaskID
   buttonrpc map_worker_client;
   map_worker_client.as_client(kRpcCoordinatorServerIp_,
                               kRpcCoordinatorServerPort_);
   std::unique_lock<std::mutex> lock(mutex_);
-  int map_task_index = map_id_++;
+  int map_worker_index = map_id_++;
   lock.unlock();
 
   while (true) {
@@ -206,18 +208,21 @@ void Worker::MapWorker() {
     bool ret = map_worker_client.call<bool>("IsMapDone").val();
     if (ret) {
       // 如果所有map任务都已经完成，通知coordinator, 并退出MapWorker
-      // cond_.notify_all() 会唤醒所有等待在cond_上的线程，此处是唤醒mrworker主线程
+      // cond_.notify_all()
+      // 会唤醒所有等待在cond_上的线程，此处是唤醒mrworker主线程
       is_map_done_ = true;
       NotifyMapDone();
-      //cond_.notify_all();
+      // cond_.notify_all();
       return;
     }
-    //通过RPC返回值取得任务，在Map中即为要处理的文件名 
+    //通过RPC返回值取得任务，在Map中即为要处理的文件名
     // map_task_name 是文件名，如 "pg-being_ernest.txt"
     // map_task_name = "empty" 表示没有任务，继续等待
-    std::string map_task_name = map_worker_client.call<std::string>("AssignMapTask").val();
+    std::string map_task_name =
+        map_worker_client.call<std::string>("AssignAMapTask").val();
     if (map_task_name == "empty") continue;
-    std::cout << "MapWorker " << map_task_index << " get task: " << map_task_name << std::endl;
+    std::cout << "MapWorker " << map_worker_index
+              << " get task: " << map_task_name << std::endl;
 
     lock.lock();
     //------------------------自己写的测试超时重转发的部分---------------------
@@ -228,22 +233,26 @@ void Worker::MapWorker() {
         disabled_map_id_ == 5) {
       ++disabled_map_id_;
       lock.unlock();
-      std::cout << "MapWorker " << map_task_index << " having received task: " << map_task_name << " is timeout and stop"
-                << std::endl;
-      std::this_thread::sleep_for(std::chrono::seconds(2));
-      continue;  // while(true) { ::sleep(2); }
+      std::cout << "MapWorker " << map_worker_index
+                << " having received task: " << map_task_name
+                << " is timeout and stop" << std::endl;
+      while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+      }
     }
     ++disabled_map_id_;
     lock.unlock();
 
-    //3、拆分任务，任务返回为文件path及map任务编号，将filename及content封装到kv的key及value中
+    // 3、拆分任务，任务返回为文件path及map任务编号，将filename及content封装到kv的key及value中
     auto kv = GetContent(map_task_name);
     // 4、执行map函数，然后将中间值写入本地
     auto kvs = map_func(kv);
-    WriteInDisk(kvs, map_task_index);
+    WriteInDisk(kvs, map_worker_index);
 
     // 5、发送RPC给master告知任务已完成
-    std::cout << "MapWorker " << map_task_index << " finish task: " << map_task_name << std::endl;  // 相当于打印日志log
+    std::cout << "MapWorker " << map_worker_index
+              << " finish task: " << map_task_name
+              << std::endl;  // 相当于打印日志log
     map_worker_client.call<void>("SetAMapTaskFinished", map_task_name);
   }
 }
@@ -261,7 +270,6 @@ void Worker::MyWrite(int fd, std::vector<std::string>& strs) {
   }
 }
 
-
 void Worker::ReduceWorker() {
   // 初始化RPC用于后续的RPC调用
   buttonrpc reduce_worker_client;
@@ -273,11 +281,13 @@ void Worker::ReduceWorker() {
     bool ret = reduce_worker_client.call<bool>("IsAllMapAndReduceDone").val();
     if (ret) return;
 
-    int reduce_task_index = reduce_worker_client.call<int>("AssignReduceTask").val();
+    int reduce_task_index =
+        reduce_worker_client.call<int>("AssignAReduceTask").val();
     // 如果没有任务，继续循环
     if (reduce_task_index == -1) continue;
-    std::cout << "ReduceWorker " << reduce_task_index << " is working on thread: "
-              << std::this_thread::get_id() << std::endl;
+    std::cout << "ReduceWorker " << reduce_task_index
+              << " is working on thread: " << std::this_thread::get_id()
+              << std::endl;
 
     std::unique_lock<std::mutex> lock(mutex_);
     //人为设置的crash线程，会导致超时，用于超时功能的测试
@@ -318,9 +328,11 @@ void Worker::ReduceWorker() {
     MyWrite(fd, word_and_occurance);
     ::close(fd);
 
-    std::cout << "ReduceWorker " << reduce_task_index << " is done on thread: "
-              << std::this_thread::get_id() << std::endl;
-    reduce_worker_client.call<bool>("SetAReduceTaskFinished", reduce_task_index);
+    std::cout << "ReduceWorker " << reduce_task_index
+              << " is done on thread: " << std::this_thread::get_id()
+              << std::endl;
+    reduce_worker_client.call<bool>("SetAReduceTaskFinished",
+                                    reduce_task_index);
   }
 }
 

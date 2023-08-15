@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "kv_raft/arguments.hpp"
 #include "buttonrpc/buttonrpc.hpp"
+#include "kv_raft/arguments.hpp"
 
 // class ServerInfo{
 // public:

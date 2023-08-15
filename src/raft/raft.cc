@@ -527,8 +527,8 @@ void* Raft::SendAppendEntries(void* arg) {
   args.leader_commit = raft->commit_index_;
 
   for (int i = args.prev_log_index; i < raft->logs_.size(); i++) {
-    args.send_logs +=
-        (raft->logs_[i].command + "," + std::to_string(raft->logs_[i].term) + ";");
+    args.send_logs += (raft->logs_[i].command + "," +
+                       std::to_string(raft->logs_[i].term) + ";");
   }
   if (args.prev_log_index == 0) {
     args.prev_log_term = 0;

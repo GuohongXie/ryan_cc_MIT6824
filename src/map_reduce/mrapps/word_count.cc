@@ -7,7 +7,8 @@
 struct KeyValue {
   std::string key;
   std::string value;
-  KeyValue(std::string  k, std::string  v) : key(std::move(k)), value(std::move(v)) {}
+  KeyValue(std::string k, std::string v)
+      : key(std::move(k)), value(std::move(v)) {}
 };
 
 /// @brief split content of a document into words, and store them in a vector
@@ -18,7 +19,7 @@ struct KeyValue {
 std::vector<std::string> SplitTextIntoWords(const std::string& text) {
   std::vector<std::string> words;
   std::string word;
-  for (char c : text) { // don't need to use reference
+  for (char c : text) {  // don't need to use reference
     if (std::isalpha(c)) {
       word += c;
     } else {
@@ -35,9 +36,9 @@ std::vector<std::string> SplitTextIntoWords(const std::string& text) {
 }
 
 /// @brief MapFunc，需要打包成动态库，并在worker中通过dlopen以及dlsym运行时加载
-/// 一个MapFunc一次处理一个document
+/// 一个MapFunc一次处理一个document, 也即一个map task
 /// @param kv kv.key: document name; kv.value: document content
-/// @return 
+/// @return {["worda":"1"], ["worda":"1"], ["wordb":"1"], ...}
 extern "C" std::vector<KeyValue> MapFunc(const KeyValue& kv) {
   std::vector<KeyValue> result;
   std::vector<std::string> words = SplitTextIntoWords(kv.value);
@@ -48,15 +49,16 @@ extern "C" std::vector<KeyValue> MapFunc(const KeyValue& kv) {
   return result;
 }
 
-/// @brief ReduceFunc，也是动态加载，输出对特定keyValue的reduce结果
+/// @brief ReduceFunc，也是动态加载, 计算每个单词的出现次数
 /// @param kvs: {["worda":"11111"], ["wordb":"111"], ["wordc":"1111"], ...}
-/// @return {"5", "3", "4", ...}，每个key对应的value是该key出现的次数
-extern "C" std::vector<std::string> ReduceFunc(const std::vector<KeyValue>& kvs) {
+/// @return {"5", "3", "4", ...}, 按顺序保存的每个单词的出现次数
+extern "C" std::vector<std::string> ReduceFunc(
+    const std::vector<KeyValue>& kvs) {
   // kvs[0].key: a word
   // kvs[0].value: a list of counts
   std::vector<std::string> result;
   result.reserve(kvs.size());
-for (const auto& kv : kvs) {
+  for (const auto& kv : kvs) {
     result.push_back(std::to_string(kv.value.size()));  // count how many "1"
   }
   return result;
