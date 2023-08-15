@@ -135,11 +135,6 @@ struct Persister {
 
 struct AppendEntriesArgs {
  public:
-  // AppendEntriesArgs():term(-1), leader_id_(-1), prev_log_index(-1),
-  // prev_log_term(-1){
-  //     //leader_commit = 0;
-  //     send_logs.clear();
-  // }
   int term{};
   int leader_id{};
   int prev_log_index{};
@@ -179,15 +174,14 @@ struct RequestVoteReply {
 
 class Raft {
  public:
-  static void* ListenForVote(void* arg);
-  static void* ListenForAppend(void* arg);
-  static void* ProcessEntriesLoop(void* arg);
-  static void* ElectionLoop(void* arg);
-  static void* CallRequestVote(void* arg);
-  static void* SendAppendEntries(
-      void* arg);  //向其他follower发送快照的函数，处理逻辑看论文
-  static void* SendInstallSnapShot(void* arg);
-  static void* ApplyLogLoop(void* arg);
+  void ListenForVote();
+  void ListenForAppend();
+  void ProcessEntriesLoop();
+  void ElectionLoop();
+  void CallRequestVote();
+  void SendAppendEntries();  //向其他follower发送快照的函数，处理逻辑看论文
+  void SendInstallSnapShot();
+  void ApplyLogLoop();
 
   enum RAFT_STATE { LEADER = 0, CANDIDATE, FOLLOWER };
   void Make(std::vector<PeersInfo> peers, int id);
@@ -320,44 +314,44 @@ void Raft::Make(std::vector<PeersInfo> peers, int id) {
   std::thread(&Raft::ApplyLogLoop, this).detach();
 }
 
-void* Raft::ApplyLogLoop(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::ApplyLogLoop() {
+  
   while (true) {
-    while (!raft->dead_) {
-      // raft->m_lock.lock();
-      // if(raft->installSnapShotFlag){
-      //     printf("%d check install : %d, apply : %d\n", raft->peer_id_,
-      //         raft->installSnapShotFlag? 1 : 0, raft->applyLogFlag ? 1 : 0);
-      //     raft->applyLogFlag = false;
-      //     raft->m_lock.unlock();
+    while (!dead_) {
+      // m_lock.lock();
+      // if(installSnapShotFlag){
+      //     printf("%d check install : %d, apply : %d\n", peer_id_,
+      //         installSnapShotFlag? 1 : 0, applyLogFlag ? 1 : 0);
+      //     applyLogFlag = false;
+      //     m_lock.unlock();
       //     ::usleep(10000);
       //     continue;
       // }
-      // raft->m_lock.unlock();
+      // m_lock.unlock();
       ::usleep(10000);
       // printf("%d's apply is called, apply is %d, commit is %d\n",
-      // raft->peer_id_, raft->last_applied_, raft->commit_index_);
+      // peer_id_, last_applied_, commit_index_);
       std::vector<ApplyMsg> msgs;
-      std::unique_lock<std::mutex> lock(raft->mutex_);
-      while (raft->last_applied_ < raft->commit_index_) {
-        raft->last_applied_++;
-        int appliedIdx = raft->IdxToCompressLogPos(raft->last_applied_);
+      std::unique_lock<std::mutex> lock(mutex_);
+      while (last_applied_ < commit_index_) {
+        last_applied_++;
+        int appliedIdx = IdxToCompressLogPos(last_applied_);
         ApplyMsg msg;
-        msg.command = raft->logs_[appliedIdx].command;
+        msg.command = logs_[appliedIdx].command;
         msg.is_command_valid = true;
-        msg.command_term = raft->logs_[appliedIdx].term;
-        msg.command_index = raft->last_applied_;
+        msg.command_term = logs_[appliedIdx].term;
+        msg.command_index = last_applied_;
         msgs.push_back(msg);
       }
       lock.unlock();
       for (int i = 0; i < msgs.size(); i++) {
         // printf("before %d's apply is called, apply is %d, commit is %d\n",
-        //     raft->peer_id_, raft->last_applied_, raft->commit_index_);
-        raft->WaitRecvSem();
+        //     peer_id_, last_applied_, commit_index_);
+        WaitRecvSem();
         // printf("after %d's apply is called, apply is %d, commit is %d\n",
-        //     raft->peer_id_, raft->last_applied_, raft->commit_index_);
-        raft->msgs_.push_back(msgs[i]);
-        raft->PostSendSem();
+        //     peer_id_, last_applied_, commit_index_);
+        msgs_.push_back(msgs[i]);
+        PostSendSem();
       }
     }
     ::usleep(10000);
@@ -387,81 +381,81 @@ void Raft::SetBroadcastTime() {
   }
 }
 
-void* Raft::ListenForVote(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::ListenForVote() {
+  
   buttonrpc server;
-  server.as_server(raft->peers_[raft->peer_id_].port.first);
-  server.bind("RequestVote", &Raft::RequestVote, raft);
+  server.as_server(peers_[peer_id_].port.first);
+  server.bind("RequestVote", &Raft::RequestVote, this);
 
-  std::thread(&Raft::ElectionLoop, raft).detach();
+  std::thread(&Raft::ElectionLoop, this).detach();
 
   server.run();
   printf("std::exit!\n");
 }
 
-void* Raft::ListenForAppend(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::ListenForAppend() {
+  
   buttonrpc server;
-  server.as_server(raft->peers_[raft->peer_id_].port.second);
-  server.bind("AppendEntries", &Raft::AppendEntries, raft);
-  server.bind("InstallSnapShot", &Raft::InstallSnapShot, raft);
+  server.as_server(peers_[peer_id_].port.second);
+  server.bind("AppendEntries", &Raft::AppendEntries, this);
+  server.bind("InstallSnapShot", &Raft::InstallSnapShot, this);
 
-  std::thread(&Raft::ProcessEntriesLoop, raft).detach();
+  std::thread(&Raft::ProcessEntriesLoop, this).detach();
 
   server.run();
   printf("std::exit!\n");
 }
 
-void* Raft::ElectionLoop(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::ElectionLoop() {
+  
   bool resetFlag = false;
-  while (!raft->dead_) {
+  while (!dead_) {
     int timeOut = std::rand() % 200000 + 200000;
     while (1) {
       ::usleep(1000);
-      std::unique_lock<std::mutex> lock(raft->mutex_);
+      std::unique_lock<std::mutex> lock(mutex_);
 
-      int during_time = raft->GetMyduration(raft->last_wake_time_);
-      if (raft->state_ == FOLLOWER && during_time > timeOut) {
-        raft->state_ = CANDIDATE;
+      int during_time = GetMyduration(last_wake_time_);
+      if (state_ == FOLLOWER && during_time > timeOut) {
+        state_ = CANDIDATE;
       }
 
-      if (raft->state_ == CANDIDATE && during_time > timeOut) {
+      if (state_ == CANDIDATE && during_time > timeOut) {
         printf(" %d attempt election at term %d, timeOut is %d\n",
-               raft->peer_id_, raft->curr_term_, timeOut);
-        ::gettimeofday(&raft->last_wake_time_, nullptr);
+               peer_id_, curr_term_, timeOut);
+        ::gettimeofday(&last_wake_time_, nullptr);
         resetFlag = true;
-        raft->curr_term_++;
-        raft->voted_for_ = raft->peer_id_;
-        raft->SaveRaftState();
+        curr_term_++;
+        voted_for_ = peer_id_;
+        SaveRaftState();
 
-        raft->recv_votes_ = 1;
-        raft->finished_vote_ = 1;
-        raft->curr_peer_id_ = 0;
+        recv_votes_ = 1;
+        finished_vote_ = 1;
+        curr_peer_id_ = 0;
 
-        for (auto server : raft->peers_) {
-          if (server.peer_id == raft->peer_id_) continue;
-          std::thread(&Raft::CallRequestVote, raft).detach();
+        for (auto server : peers_) {
+          if (server.peer_id == peer_id_) continue;
+          std::thread(&Raft::CallRequestVote, this).detach();
         }
 
-        while (raft->recv_votes_ <= raft->peers_.size() / 2 &&
-               raft->finished_vote_ != raft->peers_.size()) {
-          raft->cond_.wait(lock);
+        while (recv_votes_ <= peers_.size() / 2 &&
+               finished_vote_ != peers_.size()) {
+          cond_.wait(lock);
         }
-        if (raft->state_ != CANDIDATE) {
+        if (state_ != CANDIDATE) {
           continue;
         }
-        if (raft->recv_votes_ > raft->peers_.size() / 2) {
-          raft->state_ = LEADER;
+        if (recv_votes_ > peers_.size() / 2) {
+          state_ = LEADER;
 
-          for (int i = 0; i < raft->peers_.size(); i++) {
-            raft->next_index_[i] = raft->LastIndex() + 1;
-            raft->match_index_[i] = 0;
+          for (int i = 0; i < peers_.size(); i++) {
+            next_index_[i] = LastIndex() + 1;
+            match_index_[i] = 0;
           }
 
-          printf(" %d become new leader at term %d\n", raft->peer_id_,
-                 raft->curr_term_);
-          raft->SetBroadcastTime();
+          printf(" %d become new leader at term %d\n", peer_id_,
+                 curr_term_);
+          SetBroadcastTime();
         }
       }
       lock.unlock();
@@ -473,42 +467,42 @@ void* Raft::ElectionLoop(void* arg) {
   }
 }
 
-void* Raft::CallRequestVote(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::CallRequestVote() {
+  
   buttonrpc client;
-  std::unique_lock<std::mutex> lock(raft->mutex_);
+  std::unique_lock<std::mutex> lock(mutex_);
   RequestVoteArgs args;
-  args.candidate_id = raft->peer_id_;
-  args.term = raft->curr_term_;
-  args.last_log_index = raft->LastIndex();
-  args.last_log_term = raft->LastTerm();
-  if (raft->curr_peer_id_ == raft->peer_id_) {
-    raft->curr_peer_id_++;
+  args.candidate_id = peer_id_;
+  args.term = curr_term_;
+  args.last_log_index = LastIndex();
+  args.last_log_term = LastTerm();
+  if (curr_peer_id_ == peer_id_) {
+    curr_peer_id_++;
   }
-  int clientPeerId = raft->curr_peer_id_;
-  client.as_client("127.0.0.1", raft->peers_[raft->curr_peer_id_++].port.first);
+  int clientPeerId = curr_peer_id_;
+  client.as_client("127.0.0.1", peers_[curr_peer_id_++].port.first);
 
-  if (raft->curr_peer_id_ == raft->peers_.size() ||
-      (raft->curr_peer_id_ == raft->peers_.size() - 1 &&
-       raft->peer_id_ == raft->curr_peer_id_)) {
-    raft->curr_peer_id_ = 0;
+  if (curr_peer_id_ == peers_.size() ||
+      (curr_peer_id_ == peers_.size() - 1 &&
+       peer_id_ == curr_peer_id_)) {
+    curr_peer_id_ = 0;
   }
   lock.unlock();
 
   RequestVoteReply reply =
       client.call<RequestVoteReply>("RequestVote", args).val();
   lock.lock();
-  raft->finished_vote_++;
-  raft->cond_.notify_one();
-  if (reply.term > raft->curr_term_) {
-    raft->state_ = FOLLOWER;
-    raft->curr_term_ = reply.term;
-    raft->voted_for_ = -1;
-    raft->ReadRaftState();
-    return nullptr;
+  finished_vote_++;
+  cond_.notify_one();
+  if (reply.term > curr_term_) {
+    state_ = FOLLOWER;
+    curr_term_ = reply.term;
+    voted_for_ = -1;
+    ReadRaftState();
+    return;
   }
   if (reply.vote_granted) {
-    raft->recv_votes_++;
+    recv_votes_++;
   }
 }
 
@@ -554,131 +548,131 @@ RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
   return reply;
 }
 
-void* Raft::ProcessEntriesLoop(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
-  while (!raft->dead_) {
+void Raft::ProcessEntriesLoop() {
+  
+  while (!dead_) {
     ::usleep(1000);
-    std::lock_guard<std::mutex> lock(raft->mutex_);
-    if (raft->state_ != LEADER) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (state_ != LEADER) {
       continue;
     }
-    // printf("sec : %ld, usec : %ld\n", raft->last_broadcast_time_.tv_sec,
-    // raft->last_broadcast_time_.tv_usec);
-    int during_time = raft->GetMyduration(raft->last_broadcast_time_);
+    // printf("sec : %ld, usec : %ld\n", last_broadcast_time_.tv_sec,
+    // last_broadcast_time_.tv_usec);
+    int during_time = GetMyduration(last_broadcast_time_);
     // printf("time is %d\n", during_time);
     if (during_time < HEART_BEART_PERIOD) {
       continue;
     }
 
-    ::gettimeofday(&raft->last_broadcast_time_, nullptr);
-    // printf("%d send AppendRetries at %d\n", raft->peer_id_,
-    // raft->curr_term_); raft->m_lock.unlock();
+    ::gettimeofday(&last_broadcast_time_, nullptr);
+    // printf("%d send AppendRetries at %d\n", peer_id_,
+    // curr_term_); m_lock.unlock();
 
     for (auto& server :
-         raft->peers_) {  // TODO: 严重警告，此处不能加const，因为要修改
-      if (server.peer_id == raft->peer_id_) continue;
-      if (raft->next_index_[server.peer_id] <=
-          raft->last_included_index_) {  //进入install分支的条件，日志落后于leader的快照
+         peers_) {  // TODO: 严重警告，此处不能加const，因为要修改
+      if (server.peer_id == peer_id_) continue;
+      if (next_index_[server.peer_id] <=
+          last_included_index_) {  //进入install分支的条件，日志落后于leader的快照
         printf(
             "%d send install rpc to %d, whose nextIdx is %d, but leader's "
             "lastincludeIdx is %d\n",
-            raft->peer_id_, server.peer_id, raft->next_index_[server.peer_id],
-            raft->last_included_index_);
+            peer_id_, server.peer_id, next_index_[server.peer_id],
+            last_included_index_);
         server.is_install_flag = true;
-        std::thread(&Raft::SendInstallSnapShot, raft).detach();
+        std::thread(&Raft::SendInstallSnapShot, this).detach();
       } else {
         printf(
             "%d send append rpc to %d, whose nextIdx is %d, but leader's "
             "lastincludeIdx is %d\n",
-            raft->peer_id_, server.peer_id, raft->next_index_[server.peer_id],
-            raft->last_included_index_);
-        std::thread(&Raft::SendAppendEntries, raft).detach();
+            peer_id_, server.peer_id, next_index_[server.peer_id],
+            last_included_index_);
+        std::thread(&Raft::SendAppendEntries, this).detach();
       }
     }
   }
 }
 
-void* Raft::SendInstallSnapShot(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::SendInstallSnapShot() {
+  
   buttonrpc client;
   InstallSnapShotArgs args;
   int clientPeerId;
-  std::unique_lock<std::mutex> lock(raft->mutex_);
-  // for(int i = 0; i < raft->peers_.size(); i++){
+  std::unique_lock<std::mutex> lock(mutex_);
+  // for(int i = 0; i < peers_.size(); i++){
   //     printf("in install %d's server.is_install_flag is %d\n", i,
-  //     raft->peers_[i].is_install_flag ? 1 : 0);
+  //     peers_[i].is_install_flag ? 1 : 0);
   // }
-  for (int i = 0; i < raft->peers_.size(); i++) {
-    if (raft->peers_[i].peer_id == raft->peer_id_) {
+  for (int i = 0; i < peers_.size(); i++) {
+    if (peers_[i].peer_id == peer_id_) {
       // printf("%d is leader, continue\n", i);
       continue;
     }
-    if (!raft->peers_[i].is_install_flag) {
+    if (!peers_[i].is_install_flag) {
       // printf("%d is append, continue\n", i);
       continue;
     }
-    if (raft->is_exist_index_.count(i)) {
+    if (is_exist_index_.count(i)) {
       // printf("%d is chongfu, continue\n", i);
       continue;
     }
     clientPeerId = i;
-    raft->is_exist_index_.insert(i);
-    // printf("%d in install insert index : %d, size is %d\n", raft->peer_id_,
-    // i, raft->is_exist_index_.size());
+    is_exist_index_.insert(i);
+    // printf("%d in install insert index : %d, size is %d\n", peer_id_,
+    // i, is_exist_index_.size());
     break;
   }
 
-  client.as_client("127.0.0.1", raft->peers_[clientPeerId].port.second);
+  client.as_client("127.0.0.1", peers_[clientPeerId].port.second);
 
-  if (raft->is_exist_index_.size() == raft->peers_.size() - 1) {
-    // printf("install clear size is %d\n", raft->is_exist_index_.size());
-    for (int i = 0; i < raft->peers_.size(); i++) {
-      raft->peers_[i].is_install_flag = false;
+  if (is_exist_index_.size() == peers_.size() - 1) {
+    // printf("install clear size is %d\n", is_exist_index_.size());
+    for (int i = 0; i < peers_.size(); i++) {
+      peers_[i].is_install_flag = false;
     }
-    raft->is_exist_index_.clear();
+    is_exist_index_.clear();
   }
 
-  args.last_included_index = raft->last_included_index_;
-  args.last_included_term = raft->last_included_term_;
-  args.leader_id = raft->peer_id_;
-  args.term = raft->curr_term_;
-  raft->ReadSnapShot();
-  args.snapshot = raft->persister_.snapshot;
+  args.last_included_index = last_included_index_;
+  args.last_included_term = last_included_term_;
+  args.leader_id = peer_id_;
+  args.term = curr_term_;
+  ReadSnapShot();
+  args.snapshot = persister_.snapshot;
 
   printf("in send install snap_shot is %s\n", args.snapshot.c_str());
 
   lock.unlock();
-  // printf("%d send to %d's install port is %d\n", raft->peer_id_,
-  // clientPeerId, raft->peers_[clientPeerId].port.second);
+  // printf("%d send to %d's install port is %d\n", peer_id_,
+  // clientPeerId, peers_[clientPeerId].port.second);
   InstallSnapSHotReply reply =
       client.call<InstallSnapSHotReply>("InstallSnapShot", args).val();
-  // printf("%d is called send install to %d\n", raft->peer_id_, clientPeerId);
+  // printf("%d is called send install to %d\n", peer_id_, clientPeerId);
 
   lock.lock();
-  if (raft->curr_term_ != args.term) {
-    return nullptr;
+  if (curr_term_ != args.term) {
+    return;
   }
 
-  if (raft->curr_term_ < reply.term) {
-    raft->state_ = FOLLOWER;
-    raft->voted_for_ = -1;
-    raft->curr_term_ = reply.term;
-    raft->SaveRaftState();
-    return nullptr;
+  if (curr_term_ < reply.term) {
+    state_ = FOLLOWER;
+    voted_for_ = -1;
+    curr_term_ = reply.term;
+    SaveRaftState();
+    return;
   }
 
-  raft->next_index_[clientPeerId] = raft->LastIndex() + 1;
-  raft->match_index_[clientPeerId] = args.last_included_index;
+  next_index_[clientPeerId] = LastIndex() + 1;
+  match_index_[clientPeerId] = args.last_included_index;
 
-  raft->match_index_[raft->peer_id_] = raft->LastIndex();
-  std::vector<int> tmpIndex = raft->match_index_;
+  match_index_[peer_id_] = LastIndex();
+  std::vector<int> tmpIndex = match_index_;
   std::sort(tmpIndex.begin(), tmpIndex.end());
   int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
-  if (realMajorityMatchIndex > raft->commit_index_ &&
-      (realMajorityMatchIndex <= raft->last_included_index_ ||
-       raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)].term ==
-           raft->curr_term_)) {
-    raft->commit_index_ = realMajorityMatchIndex;
+  if (realMajorityMatchIndex > commit_index_ &&
+      (realMajorityMatchIndex <= last_included_index_ ||
+       logs_[IdxToCompressLogPos(realMajorityMatchIndex)].term ==
+           curr_term_)) {
+    commit_index_ = realMajorityMatchIndex;
   }
 }
 
@@ -764,121 +758,121 @@ std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
 
 void Raft::PushBackLog(LogEntry log) { logs_.push_back(log); }
 
-void* Raft::SendAppendEntries(void* arg) {
-  Raft* raft = static_cast<Raft*>(arg);
+void Raft::SendAppendEntries() {
+  
 
   buttonrpc client;
   AppendEntriesArgs args;
   int clientPeerId;
-  std::unique_lock<std::mutex> lock(raft->mutex_);
+  std::unique_lock<std::mutex> lock(mutex_);
 
-  // for(int i = 0; i < raft->peers_.size(); i++){
+  // for(int i = 0; i < peers_.size(); i++){
   //     printf("in append %d's server.is_install_flag is %d\n", i,
-  //     raft->peers_[i].is_install_flag ? 1 : 0);
+  //     peers_[i].is_install_flag ? 1 : 0);
   // }
 
-  for (int i = 0; i < raft->peers_.size(); i++) {
-    if (raft->peers_[i].peer_id == raft->peer_id_) continue;
-    if (raft->peers_[i].is_install_flag) continue;
-    if (raft->is_exist_index_.count(i)) continue;
+  for (int i = 0; i < peers_.size(); i++) {
+    if (peers_[i].peer_id == peer_id_) continue;
+    if (peers_[i].is_install_flag) continue;
+    if (is_exist_index_.count(i)) continue;
     clientPeerId = i;
-    raft->is_exist_index_.insert(i);
-    // printf("%d in append insert index : %d, size is %d\n", raft->peer_id_, i,
-    // raft->is_exist_index_.size());
+    is_exist_index_.insert(i);
+    // printf("%d in append insert index : %d, size is %d\n", peer_id_, i,
+    // is_exist_index_.size());
     break;
   }
 
-  client.as_client("127.0.0.1", raft->peers_[clientPeerId].port.second);
-  // printf("%d send to %d's append port is %d\n", raft->peer_id_, clientPeerId,
-  // raft->peers_[clientPeerId].port.second);
+  client.as_client("127.0.0.1", peers_[clientPeerId].port.second);
+  // printf("%d send to %d's append port is %d\n", peer_id_, clientPeerId,
+  // peers_[clientPeerId].port.second);
 
-  if (raft->is_exist_index_.size() == raft->peers_.size() - 1) {
-    // printf("append clear size is %d\n", raft->is_exist_index_.size());
-    for (int i = 0; i < raft->peers_.size(); i++) {
-      raft->peers_[i].is_install_flag = false;
+  if (is_exist_index_.size() == peers_.size() - 1) {
+    // printf("append clear size is %d\n", is_exist_index_.size());
+    for (int i = 0; i < peers_.size(); i++) {
+      peers_[i].is_install_flag = false;
     }
-    raft->is_exist_index_.clear();
+    is_exist_index_.clear();
   }
 
-  args.term = raft->curr_term_;
-  args.leader_id = raft->peer_id_;
-  args.prev_log_index = raft->next_index_[clientPeerId] - 1;
-  args.leader_commit = raft->commit_index_;
+  args.term = curr_term_;
+  args.leader_id = peer_id_;
+  args.prev_log_index = next_index_[clientPeerId] - 1;
+  args.leader_commit = commit_index_;
 
-  for (int i = raft->IdxToCompressLogPos(args.prev_log_index) + 1;
-       i < raft->logs_.size(); i++) {
-    args.send_logs += (raft->logs_[i].command + "," +
-                       std::to_string(raft->logs_[i].term) + ";");
+  for (int i = IdxToCompressLogPos(args.prev_log_index) + 1;
+       i < logs_.size(); i++) {
+    args.send_logs += (logs_[i].command + "," +
+                       std::to_string(logs_[i].term) + ";");
   }
 
   //用作自己调试可能，因为如果leader的m_prevLogIndex为0，follower的size必为0，自己调试直接赋日志给各个server看选举情况可能需要这段代码
   // if(args.prev_log_index == 0){
   //     args.prev_log_term = 0;
-  //     if(raft->logs_.size() != 0){
-  //         args.prev_log_term = raft->logs_[0].term;
+  //     if(logs_.size() != 0){
+  //         args.prev_log_term = logs_[0].term;
   //     }
   // }
 
-  if (args.prev_log_index == raft->last_included_index_) {
-    args.prev_log_term = raft->last_included_term_;
+  if (args.prev_log_index == last_included_index_) {
+    args.prev_log_term = last_included_term_;
   } else {  //有快照的话m_prevLogIndex必然不为0
     args.prev_log_term =
-        raft->logs_[raft->IdxToCompressLogPos(args.prev_log_index)].term;
+        logs_[IdxToCompressLogPos(args.prev_log_index)].term;
   }
 
   // printf("[%d] -> [%d]'s prevLogIndex : %d, prevLogTerm : %d\n",
-  // raft->peer_id_, clientPeerId, args.prev_log_index, args.prev_log_term);
+  // peer_id_, clientPeerId, args.prev_log_index, args.prev_log_term);
 
   lock.unlock();
   AppendEntriesReply reply =
       client.call<AppendEntriesReply>("AppendEntries", args).val();
 
   lock.lock();
-  if (raft->curr_term_ != args.term) {
-    return nullptr;
+  if (curr_term_ != args.term) {
+    return;
   }
-  if (reply.term > raft->curr_term_) {
-    raft->state_ = FOLLOWER;
-    raft->curr_term_ = reply.term;
-    raft->voted_for_ = -1;
-    raft->SaveRaftState();
-    return nullptr;  // FOLLOWER没必要维护nextIndex,成为leader会更新
+  if (reply.term > curr_term_) {
+    state_ = FOLLOWER;
+    curr_term_ = reply.term;
+    voted_for_ = -1;
+    SaveRaftState();
+    return;  // FOLLOWER没必要维护nextIndex,成为leader会更新
   }
 
   if (reply.success) {
-    raft->next_index_[clientPeerId] =
-        args.prev_log_index + raft->GetCmdAndTerm(args.send_logs).size() +
+    next_index_[clientPeerId] =
+        args.prev_log_index + GetCmdAndTerm(args.send_logs).size() +
         1;  //可能RPC调用完log又增加了，但那些是不应该算进去的，不能直接取m_logs.size()
             //+ 1
-    raft->match_index_[clientPeerId] = raft->next_index_[clientPeerId] - 1;
-    raft->match_index_[raft->peer_id_] = raft->LastIndex();
+    match_index_[clientPeerId] = next_index_[clientPeerId] - 1;
+    match_index_[peer_id_] = LastIndex();
 
-    std::vector<int> tmpIndex = raft->match_index_;
+    std::vector<int> tmpIndex = match_index_;
     std::sort(tmpIndex.begin(), tmpIndex.end());
     int realMajorityMatchIndex = tmpIndex[tmpIndex.size() / 2];
-    if (realMajorityMatchIndex > raft->commit_index_ &&
-        (realMajorityMatchIndex <= raft->last_included_index_ ||
-         raft->logs_[raft->IdxToCompressLogPos(realMajorityMatchIndex)].term ==
-             raft->curr_term_)) {
-      raft->commit_index_ = realMajorityMatchIndex;
+    if (realMajorityMatchIndex > commit_index_ &&
+        (realMajorityMatchIndex <= last_included_index_ ||
+         logs_[IdxToCompressLogPos(realMajorityMatchIndex)].term ==
+             curr_term_)) {
+      commit_index_ = realMajorityMatchIndex;
     }
   }
 
   if (!reply.success) {
     if (reply.conflict_term != -1 && reply.conflict_term != -100) {
       int leader_conflict_index = -1;
-      for (int index = args.prev_log_index; index > raft->last_included_index_;
+      for (int index = args.prev_log_index; index > last_included_index_;
            index--) {
-        if (raft->logs_[raft->IdxToCompressLogPos(index)].term ==
+        if (logs_[IdxToCompressLogPos(index)].term ==
             reply.conflict_term) {
           leader_conflict_index = index;
           break;
         }
       }
       if (leader_conflict_index != -1) {
-        raft->next_index_[clientPeerId] = leader_conflict_index + 1;
+        next_index_[clientPeerId] = leader_conflict_index + 1;
       } else {
-        raft->next_index_[clientPeerId] =
+        next_index_[clientPeerId] =
             reply
                 .conflict_index;  //这里加不加1都可，无非是多一位还是少一位，此处指follower对应index为空
       }
@@ -887,10 +881,10 @@ void* Raft::SendAppendEntries(void* arg) {
       }
       //-------------------很关键，运行时不能注释下面这段，因为我自己调试bug强行增加bug，没有专门的测试程序-----------------
       else
-        raft->next_index_[clientPeerId] = reply.conflict_index;
+        next_index_[clientPeerId] = reply.conflict_index;
     }
   }
-  raft->SaveRaftState();
+  SaveRaftState();
 }
 
 AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {

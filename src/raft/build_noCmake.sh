@@ -1,6 +1,7 @@
 #!/bin/sh
-
 set -x
+
+# for quick build
 
 rm persis*
 rm raft
