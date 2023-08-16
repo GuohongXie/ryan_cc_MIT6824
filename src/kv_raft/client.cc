@@ -11,19 +11,17 @@
 #include "buttonrpc/buttonrpc.hpp"
 #include "kv_raft/arguments.hpp"
 
-// class ServerInfo{
-// public:
-//     int port;
-//     int id;
-// };
 
 constexpr int EVERY_SERVER_PORT = 3;
 
-int curr_port_id =
-    0;  //为了减轻server端的RPC压力，所以server对PUT,GET,APPEND操作设置了多个RPC端口响应
-std::mutex
-    port_mutex;  //由于applyLoop中做了处理，只响应递增请求，满足线性一致性，且applyLoop是做完一个在做下一个
-                 //即完全按照raft日志提交顺序做，客户端并发虽然不能判断哪个先写入日志，但能保证看到的一定是满足按照日志应用的结果
+//为了减轻server端的RPC压力，所以server对PUT,GET,APPEND操作设置了多个RPC端口响应
+int curr_port_id = 0;  
+
+//由于applyLoop中做了处理，只响应递增请求，满足线性一致性，
+//且applyLoop是做完一个在做下一个
+//即完全按照raft日志提交顺序做，客户端并发虽然不能判断哪个先写入日志，
+//但能保证看到的一定是满足按照日志应用的结果
+std::mutex port_mutex;  
 
 class Clerk {
  public:

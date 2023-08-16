@@ -33,17 +33,16 @@ struct KVServerInfo {
 
 class KVServer {
  public:
-  static void* RPCServer(void* arg);
-  static void* ApplyLoop(void* arg);  //持续监听raft层提交的msg的守护线程
-  static void* SnapShotLoop(
-      void* arg);  //持续监听raft层日志是否超过给定大小，判断进行快照的守护线程
+  void RPCServer();
+  void ApplyLoop();  //持续监听raft层提交的msg的守护线程
+  void SnapShotLoop();  //持续监听raft层日志是否超过给定大小，判断进行快照的守护线程
   void StartKvServer(std::vector<KVServerInfo>& kv_info, int me,
                      int maxRaftState);
   static std::vector<PeersInfo> GetRaftPort(std::vector<KVServerInfo>& kv_info);
   GetReply Get(const GetArgs& args);
   PutAppendReply PutAppend(const PutAppendArgs& args);
 
-  std::string Test(std::string key) {
+  std::string Test(const std::string& key) {
     return database_[key];
   }  //测试其余不是leader的server的状态机
 
@@ -101,17 +100,15 @@ void KVServer::StartKvServer(std::vector<KVServerInfo>& kv_info, int me,
   std::thread(&KVServer::SnapShotLoop, this).detach();
 }
 
-void* KVServer::RPCServer(void* arg) {
-  auto* kv =
-      static_cast<KVServer*>(arg);  // equals to "auto kv = (KVServer*)arg;"
+void KVServer::RPCServer() {
   buttonrpc server;
-  std::unique_lock<std::mutex> lock(kv->mutex_);
-  int port = kv->curr_port_id_++;
+  std::unique_lock<std::mutex> lock(mutex_);
+  int port = curr_port_id_++;
   lock.unlock();
 
-  server.as_server(kv->port_[port]);
-  server.bind("Get", &KVServer::Get, kv);
-  server.bind("PutAppend", &KVServer::PutAppend, kv);
+  server.as_server(port_[port]);
+  server.bind("Get", &KVServer::Get, this);
+  server.bind("PutAppend", &KVServer::PutAppend, this);
   server.run();
 }
 
@@ -229,57 +226,56 @@ PutAppendReply KVServer::PutAppend(const PutAppendArgs& args) {
   return reply;
 }
 
-void* KVServer::ApplyLoop(void* arg) {
-  auto* kv = static_cast<KVServer*>(arg);
+void KVServer::ApplyLoop() {
   while (true) {
-    kv->raft_.WaitSendSem();
-    ApplyMsg msg = kv->raft_.GetBackMsg();
+    raft_.WaitSendSem();
+    ApplyMsg msg = raft_.GetBackMsg();
 
     if (!msg.is_command_valid) {  //为快照处理的逻辑
-      std::lock_guard<std::mutex> lock(kv->mutex_);
+      std::lock_guard<std::mutex> lock(mutex_);
       if (msg.snapshot.empty()) {
-        kv->database_.clear();
-        kv->client_seq_map_.clear();
+        database_.clear();
+        client_seq_map_.clear();
       } else {
-        kv->RecoverySnapShot(msg.snapshot);
+        RecoverySnapShot(msg.snapshot);
       }
       //一般初始化时安装快照，以及follower收到installSnapShot向上层kvserver发起安装快照请求
-      kv->last_applied_index_ = msg.last_included_index;
-      printf("in stall last_applied_index_ is %d\n", kv->last_applied_index_);
+      last_applied_index_ = msg.last_included_index;
+      printf("in stall last_applied_index_ is %d\n", last_applied_index_);
     } else {
       Operation operation = msg.GetOperation();
       int index = msg.command_index;
 
-      std::unique_lock<std::mutex> lock(kv->mutex_);
-      kv->last_applied_index_ = index;  //收到一个msg就更新m_lastAppliedIndex
+      std::unique_lock<std::mutex> lock(mutex_);
+      last_applied_index_ = index;  //收到一个msg就更新m_lastAppliedIndex
       bool isOpExist = false, isSeqExist = false;
       int prevRequestIdx = std::numeric_limits<int>::max();  // INT_MAX;
       OpContext* opctx = nullptr;
-      if (kv->request_map_.count(index)) {
+      if (request_map_.count(index)) {
         isOpExist = true;
-        opctx = kv->request_map_[index];
+        opctx = request_map_[index];
         if (opctx->op.term != operation.term) {
           opctx->is_wrong_leader = true;
           printf("not euqal term -> wrongLeader : opctx %d, op : %d\n",
                  opctx->op.term, operation.term);
         }
       }
-      if (kv->client_seq_map_.count(operation.client_id)) {
+      if (client_seq_map_.count(operation.client_id)) {
         isSeqExist = true;
-        prevRequestIdx = kv->client_seq_map_[operation.client_id];
+        prevRequestIdx = client_seq_map_[operation.client_id];
       }
-      kv->client_seq_map_[operation.client_id] = operation.request_id;
+      client_seq_map_[operation.client_id] = operation.request_id;
 
       if (operation.op == "Put" || operation.op == "Append") {
         //非leader的server必然不存在命令，同样处理状态机，leader的第一条命令也不存在，保证按序处理
         if (!isSeqExist || prevRequestIdx < operation.request_id) {
           if (operation.op == "Put") {
-            kv->database_[operation.key] = operation.value;
+            database_[operation.key] = operation.value;
           } else if (operation.op == "Append") {
-            if (kv->database_.count(operation.key)) {
-              kv->database_[operation.key] += operation.value;
+            if (database_.count(operation.key)) {
+              database_[operation.key] += operation.value;
             } else {
-              kv->database_[operation.key] = operation.value;
+              database_[operation.key] = operation.value;
             }
           }
         } else if (isOpExist) {
@@ -287,8 +283,8 @@ void* KVServer::ApplyLoop(void* arg) {
         }
       } else {
         if (isOpExist) {
-          if (kv->database_.count(operation.key)) {
-            opctx->value = kv->database_[operation.key];  //如果有则返回value
+          if (database_.count(operation.key)) {
+            opctx->value = database_[operation.key];  //如果有则返回value
           } else {
             opctx->is_key_existed = false;
             opctx->value = "";  //如果无返回""
@@ -306,7 +302,7 @@ void* KVServer::ApplyLoop(void* arg) {
         ::close(fd);
       }
     }
-    kv->raft_.PostRecvSem();
+    raft_.PostRecvSem();
   }
 }
 
@@ -325,28 +321,27 @@ std::string KVServer::GetSnapShot() {
   return snapshot;
 }
 
-void* KVServer::SnapShotLoop(void* arg) {
-  auto* kv = static_cast<KVServer*>(arg);
+void KVServer::SnapShotLoop() {
   while (true) {
     std::string snapshot;
     int lastIncluedIndex;
-    // printf("%d not in loop -> kv->last_applied_index_ : %d\n", kv->id_,
-    // kv->last_applied_index_);
-    if (kv->max_raft_state_ != -1 &&
-        kv->raft_.ExceedLogSize(
-            kv->max_raft_state_)) {  //设定了大小且超出大小则应用层进行快照
-      std::lock_guard<std::mutex> lock(kv->mutex_);
-      snapshot = kv->GetSnapShot();
-      lastIncluedIndex = kv->last_applied_index_;
-      // printf("%d in loop -> kv->last_applied_index_ : %d\n", kv->id_,
-      // kv->last_applied_index_);
+    // printf("%d not in loop -> last_applied_index_ : %d\n", id_,
+    // last_applied_index_);
+    if (max_raft_state_ != -1 &&
+        raft_.ExceedLogSize(
+            max_raft_state_)) {  //设定了大小且超出大小则应用层进行快照
+      std::lock_guard<std::mutex> lock(mutex_);
+      snapshot = GetSnapShot();
+      lastIncluedIndex = last_applied_index_;
+      // printf("%d in loop -> last_applied_index_ : %d\n", id_,
+      // last_applied_index_);
     }
-    if (snapshot.size() != 0) {
-      kv->raft_.RecvSnapShot(
+    if (!snapshot.empty()) {
+      raft_.RecvSnapShot(
           snapshot,
           lastIncluedIndex);  //向raft层发送快照用于日志压缩，同时持久化
-      printf("%d called recvsnapShot size is %d, lastapply is %d\n", kv->id_,
-             snapshot.size(), kv->last_applied_index_);
+      printf("%d called recvsnapShot size is %d, lastapply is %d\n", id_,
+             snapshot.size(), last_applied_index_);
     }
     ::usleep(10000);
   }
@@ -382,9 +377,9 @@ void KVServer::RecoverySnapShot(std::string snapshot) {
   printf("recovery is called\n");
   std::vector<std::string> str;
   std::string tmp;
-  for (int i = 0; i < snapshot.size(); i++) {
-    if (snapshot[i] != ';') {
-      tmp += snapshot[i];
+  for (char c : snapshot) {
+    if (c != ';') {
+      tmp += c;
     } else {
       if (!tmp.empty()) {
         str.push_back(tmp);
@@ -440,7 +435,7 @@ void KVServer::RecoverySnapShot(std::string snapshot) {
     client_seq_map_[atoi(tmp.c_str())] = atoi(value.c_str());
   }
   printf("-----------------databegin---------------------------\n");
-  for (auto a : database_) {
+  for (const auto& a : database_) {
     printf("data-> key is %s, value is %s\n", a.first.c_str(),
            a.second.c_str());
   }
@@ -487,6 +482,6 @@ int main() {
   kv_servers[i]
       ->ActivateRaft();  //重新激活对应的raft，在raft层发起installRPC请求，且向对应落后的kvServer安装从raft的leader处获得的快照
   //--------------------------------------Test---------------------------------------------
-  while (1)
+  while (true)
     ;
 }
