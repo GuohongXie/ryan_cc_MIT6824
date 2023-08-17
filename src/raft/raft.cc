@@ -8,6 +8,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "buttonrpc/buttonrpc.hpp"
@@ -55,7 +56,7 @@ struct PeersInfo {
 struct LogEntry {
   //这个构造函数不可少
   explicit LogEntry(std::string cmd = "", int term_tmp = -1)
-      : command(cmd), term(term_tmp) {}
+      : command(std::move(cmd)), term(term_tmp) {}
   std::string command;
   int term{-1};
 };
@@ -85,7 +86,7 @@ struct AppendEntriesArgs {
         d.leader_commit >> d.entry;
     return in;
   }
-  friend Serializer& operator<<(Serializer& out, AppendEntriesArgs d) {
+  friend Serializer& operator<<(Serializer& out, const AppendEntriesArgs& d) {
     out << d.term << d.leader_id << d.prev_log_index << d.prev_log_term
         << d.leader_commit << d.entry;
     return out;
@@ -141,12 +142,12 @@ class Raft {
   std::pair<int, bool> GetState();  
 
   RequestVoteReply RequestVote(RequestVoteArgs args);  //vote的RPChandler
-  AppendEntriesReply AppendEntries(AppendEntriesArgs args); //append的RPChandler
+  AppendEntriesReply AppendEntries(const AppendEntriesArgs& args); //append的RPChandler
 
   bool CheckLogUptodate(int term, int index);  //判断是否最新日志(两个准则)，vote时会用到
-  void PushBackLog(LogEntry log);  //插入新日志
-  std::vector<LogEntry> GetCmdAndTerm(std::string text);  //用的RPC不支持传容器，所以封装成string，这个是解封装恢复函数
-  StartRet Start(Operation op);  //向raft传日志的函数，只有leader响应并立即返回，应用层用到
+  void PushBackLog(const LogEntry& log);  //插入新日志
+  static std::vector<LogEntry> GetCmdAndTerm(std::string text);  //用的RPC不支持传容器，所以封装成string，这个是解封装恢复函数
+  StartRet Start(const Operation& op);  //向raft传日志的函数，只有leader响应并立即返回，应用层用到
 
   void PrintLogs();
 
@@ -237,9 +238,9 @@ void Raft::ApplyLogLoop() {
 
 /// @brief 计算传入的时间到当前时间的时间间隔(微秒)
 int Raft::GetMyduration(const timeval& last) {
-  struct timeval now;
+  struct timeval now{};
   ::gettimeofday(&now, nullptr);
-  return ((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec - last.tv_usec));
+  return (static_cast<int>((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec - last.tv_usec)));
 }
 
 //稍微解释下-200000us是因为让记录的last_broadcast_time_变早，
@@ -325,7 +326,7 @@ void Raft::ElectionLoop() {
           state_ = LEADER;
 
           for (int i = 0; i < peers_.size(); i++) {
-            next_index_[i] = logs_.size() + 1;
+            next_index_[i] = static_cast<int>(logs_.size() + 1);
             match_index_[i] = 0;
           }
 
@@ -349,7 +350,7 @@ void Raft::CallRequestVote() {
   RequestVoteArgs args;
   args.candidate_id = peer_id_;
   args.term = curr_term_;
-  args.last_log_index = logs_.size();
+  args.last_log_index = static_cast<int>(logs_.size());
   args.last_log_term = !logs_.empty() ? logs_.back().term : 0;
 
   if (curr_peer_id_ == peer_id_) {
@@ -463,34 +464,34 @@ void Raft::ProcessEntriesLoop() {
 
 std::vector<LogEntry> Raft::GetCmdAndTerm(std::string text) {
   std::vector<LogEntry> logs;
-  int N = text.size();
-  std::vector<std::string> str;
-  std::string tmp = "";
-  for (int i = 0; i < N; i++) {
+  size_t N = text.size();
+  std::vector<std::string> logs_str;
+  std::string tmp;
+  for (size_t i = 0; i < N; i++) {
     if (text[i] != ';') {
       tmp += text[i];
     } else {
-      if (!tmp.empty()) str.push_back(tmp);
+      if (!tmp.empty()) logs_str.push_back(tmp);
       tmp = "";
     }
   }
-  for (int i = 0; i < str.size(); i++) {
+  for (auto& i : logs_str) {
     tmp = "";
     int j = 0;
-    for (; j < str[i].size(); j++) {
-      if (str[i][j] != ',') {
-        tmp += str[i][j];
+    for (; j < i.size(); j++) {
+      if (i[j] != ',') {
+        tmp += i[j];
       } else
         break;
     }
-    std::string number(str[i].begin() + j + 1, str[i].end());
-    int num = std::atoi(number.c_str());
+    std::string number(i.begin() + j + 1, i.end());
+    int num = std::stoi(number);
     logs.emplace_back(LogEntry(tmp, num));
   }
   return logs;
 }
 
-void Raft::PushBackLog(LogEntry log) { logs_.push_back(log); }
+void Raft::PushBackLog(const LogEntry& log) { logs_.push_back(log); }
 
 void Raft::SendAppendEntries() {
   buttonrpc client;
@@ -543,8 +544,7 @@ void Raft::SendAppendEntries() {
   }
 
   if (reply.success) {
-    next_index_[clientPeerId] +=
-        GetCmdAndTerm(args.entry).size();
+    next_index_[clientPeerId] += static_cast<int>(GetCmdAndTerm(args.entry).size());
     match_index_[clientPeerId] = next_index_[clientPeerId] - 1;
 
     std::vector<int> tmpIndex = match_index_;
@@ -577,7 +577,7 @@ void Raft::SendAppendEntries() {
   SaveRaftState();
 }
 
-AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
+AppendEntriesReply Raft::AppendEntries(const AppendEntriesArgs& args) {
   std::vector<LogEntry> recvLog = GetCmdAndTerm(args.entry);
   AppendEntriesReply reply;
   std::unique_lock<std::mutex> lock(mutex_);
@@ -606,15 +606,15 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
   ::gettimeofday(&last_wake_time_, nullptr);
   // persister_()
 
-  int logSize = 0;
+  int log_size = 0;
   if (logs_.empty()) {
     for (const auto& log : recvLog) {
       PushBackLog(log);
     }
     SaveRaftState();
-    logSize = logs_.size();
+    log_size = static_cast<int>(logs_.size());
     if (commit_index_ < args.leader_commit) {
-      commit_index_ = std::min(args.leader_commit, logSize);
+      commit_index_ = std::min(args.leader_commit, log_size);
     }
     lock.unlock();
     reply.success = true;
@@ -624,8 +624,8 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
 
   if (logs_.size() < args.prev_log_index) {
     printf(" [%d]'s logs.size : %d < [%d]'s prevLogIdx : %d\n", peer_id_,
-           logs_.size(), args.leader_id, args.prev_log_index);
-    reply.conflict_index = logs_.size();  //索引要加1
+           static_cast<int>(logs_.size()), args.leader_id, args.prev_log_index);
+    reply.conflict_index = static_cast<int>(logs_.size());  //索引要加1
     lock.unlock();
     reply.success = false;
     return reply;
@@ -648,8 +648,8 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
     return reply;
   }
 
-  logSize = logs_.size();
-  for (int i = args.prev_log_index; i < logSize; i++) {
+  log_size = static_cast<int>(logs_.size());
+  for (int i = args.prev_log_index; i < log_size; i++) {
     logs_.pop_back();
   }
   // logs_.insert(logs_.end(), recvLog.begin(), recvLog.end());
@@ -657,11 +657,11 @@ AppendEntriesReply Raft::AppendEntries(AppendEntriesArgs args) {
     PushBackLog(log);
   }
   SaveRaftState();
-  logSize = logs_.size();
+  log_size = static_cast<int>(logs_.size());
   if (commit_index_ < args.leader_commit) {
-    commit_index_ = std::min(args.leader_commit, logSize);
+    commit_index_ = std::min(args.leader_commit, log_size);
   }
-  for (auto a : logs_) printf("%d ", a.term);
+  for (const auto& a : logs_) printf("%d ", a.term);
   printf(" [%d] sync success\n", peer_id_);
   lock.unlock();
   reply.success = true;
@@ -677,14 +677,14 @@ std::pair<int, bool> Raft::GetState() {
 
 void Raft::Kill() { is_dead_ = true; }
 
-StartRet Raft::Start(Operation op) {
+StartRet Raft::Start(const Operation& op) {
   StartRet ret;
   std::unique_lock<std::mutex> lock(mutex_);
   RAFT_STATE state = state_;
   if (state != LEADER) {
     return ret;
   }
-  ret.cmd_index = logs_.size();
+  ret.cmd_index = static_cast<int>(logs_.size());
   ret.curr_term_ = curr_term_;
   ret.is_leader = true;
 
@@ -722,7 +722,7 @@ void Raft::Serialize() {
     std::perror("open");
     std::exit(-1);
   }
-  int len = ::write(fd, str.c_str(), str.size());
+  ssize_t len = ::write(fd, str.c_str(), str.size());
   if (len == -1) {
     std::perror("write");
     ::close(fd);  // 无论如何都需要关闭文件，所以这里也需要关闭。
@@ -742,11 +742,11 @@ bool Raft::Deserialize() {
     std::perror("open");
     return false;
   }
-  int length = ::lseek(fd, 0, SEEK_END);
+  ssize_t length = ::lseek(fd, 0, SEEK_END);
   ::lseek(fd, 0, SEEK_SET);
   char buf[length];
   ::bzero(buf, length);
-  int len = ::read(fd, buf, length);
+  ssize_t len = ::read(fd, buf, length);
   if (len != length) {
     perror("read");
     ::close(fd);  //无论如何都需要关闭文件，所以这里也需要关闭
@@ -811,7 +811,7 @@ void Raft::ReadRaftState() {
     PushBackLog(log);
   }
   printf(" [%d]'s term : %d, votefor : %d, logs.size() : %d\n", peer_id_,
-         curr_term_, voted_for_, logs_.size());
+         curr_term_, voted_for_, static_cast<int>(logs_.size()));
 }
 
 void Raft::SaveRaftState() {
@@ -838,7 +838,7 @@ int main(int argc, char* argv[]) {
   for (int i = 0; i < peers_num; i++) {
     peers[i].peer_id = i;
     peers[i].port.first = COMMOM_PORT + i;                  // vote的RPC端口
-    peers[i].port.second = COMMOM_PORT + i + peers.size();  // append的RPC端口
+    peers[i].port.second = COMMOM_PORT + i + static_cast<int>(peers.size());  // append的RPC端口
   }
 
   std::vector<std::unique_ptr<Raft>> rafts;

@@ -11,7 +11,7 @@ struct Select {
   explicit Select(const std::string& fifo_name);
   std::string fifo_name;
   bool is_recved;
-  static void* Work(void* arg);
+  void Work();
 };
 
 Select::Select(const std::string& fifo_name) {
@@ -21,14 +21,13 @@ Select::Select(const std::string& fifo_name) {
   std::thread(&Select::Work, this).detach();
 }
 
-void* Select::Work(void* arg) {
-  auto* select = static_cast<Select*>(arg);
+void Select::Work() {
   char buf[100];
-  int fd = ::open(select->fifo_name.c_str(), O_RDONLY);
+  int fd = ::open(fifo_name.c_str(), O_RDONLY);
   ::read(fd, buf, sizeof(buf));
-  select->is_recved = true;
+  is_recved = true;
   ::close(fd);
-  ::unlink(select->fifo_name.c_str());
+  ::unlink(fifo_name.c_str());
 }
 
 //用于保存处理客户端RPC请求时的上下文信息，每次调用start()且为leader时会存到对应的map中，key为start返回的日志index，独一无二

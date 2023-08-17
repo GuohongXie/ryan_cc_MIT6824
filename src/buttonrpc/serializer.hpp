@@ -31,7 +31,7 @@ public:
   void input(const char* in, size_t len) { buffer_.insert(buffer_.end(), in, in + len); }
 
   int findc(char c) {
-    auto itr = std::find(buffer_.begin() + curr_pos_, buffer_.end(), c);
+    auto itr = std::find(buffer_.begin() + static_cast<int>(curr_pos_), buffer_.end(), c);
     if (itr != buffer_.end()) {
       return static_cast<int>(itr - buffer_.begin() - curr_pos_);
     }
@@ -68,7 +68,7 @@ class Serializer {
 
  public:
   void reset() { io_device_.reset(); }
-  int size() { return io_device_.size(); }
+  size_t size() { return io_device_.size(); }
   void skip_raw_date(int k) { io_device_.offset(k); }
   const char* data() { return io_device_.data(); }
   void byte_orser(char* in, int len) const {
@@ -87,10 +87,10 @@ class Serializer {
   }
 
   template <typename T>
-  void output_type(T& t);
+  void output_type(T& out);
 
   template <typename T>
-  void input_type(T t);
+  void input_type(T in);
 
   // 
   void get_length_mem(char* p, int len) {
@@ -117,20 +117,20 @@ class Serializer {
 };
 
 template <typename T>
-inline void Serializer::output_type(T& t) {
+inline void Serializer::output_type(T& out) {
   int len = sizeof(T);
   char* d = new char[len];
   if (!io_device_.is_eof()) {
     std::memcpy(d, io_device_.current(), len);
     io_device_.offset(len);
     byte_orser(d, len);
-    t = *reinterpret_cast<T*>(&d[0]);
+    out = *reinterpret_cast<T*>(&d[0]);
   }
   delete[] d;
 }
 
 template <>
-inline void Serializer::output_type(std::string& in) {
+inline void Serializer::output_type(std::string& out) {
   int marklen = sizeof(uint16_t);
   char* d = new char[marklen];
   std::memcpy(d, io_device_.current(), marklen);
@@ -139,15 +139,15 @@ inline void Serializer::output_type(std::string& in) {
   io_device_.offset(marklen);
   delete[] d;
   if (len == 0) return;
-  in.insert(in.begin(), io_device_.current(), io_device_.current() + len);
+  out.insert(out.begin(), io_device_.current(), io_device_.current() + len);
   io_device_.offset(len);
 }
 
 template <typename T>
-inline void Serializer::input_type(T t) {
+inline void Serializer::input_type(T in) {
   int len = sizeof(T);
   char* d = new char[len];
-  const char* p = reinterpret_cast<const char*>(&t);
+  const char* p = reinterpret_cast<const char*>(&in);
   std::memcpy(d, p, len);
   byte_orser(d, len);
   io_device_.input(d, len);
@@ -155,7 +155,7 @@ inline void Serializer::input_type(T t) {
 }
 
 template <>
-inline void Serializer::input_type(std::string in) {
+inline void Serializer::input_type(std::string in) {  //不能用const &
   // 
   uint16_t len = in.size();
   char* p = reinterpret_cast<char*>(&len);

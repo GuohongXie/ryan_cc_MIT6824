@@ -4,6 +4,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <zmq.hpp>
 
 #include "buttonrpc/serializer.hpp"
@@ -48,7 +49,7 @@ class buttonrpc {
 
     void set_val(const type& val) { val_ = val; }
     void set_code(code_type code) { code_ = code; }
-    void set_msg(msg_type msg) { msg_ = msg; }
+    void set_msg(msg_type msg) { msg_ = std::move(msg); }
 
     friend Serializer& operator>>(Serializer& in, value_t<T>& d) {
       in >> d.code_ >> d.msg_;
@@ -169,11 +170,11 @@ class buttonrpc {
       name_func_map_;
 
   zmq::context_t context_;
-  zmq::socket_t* socket_;
+  zmq::socket_t* socket_{};
 
   rpc_err_code error_code_;
 
-  int role_;
+  int role_{};
 };
 
 buttonrpc::buttonrpc() : context_(1) { error_code_ = RPC_ERR_SUCCESS; }
@@ -212,7 +213,7 @@ void buttonrpc::send(zmq::message_t& data) {
 }
 //忽略了recv的返回值，即忽略了recv的异常处理
 void buttonrpc::recv(zmq::message_t& data) {
-    socket_->recv(data, zmq::recv_flags::none);
+  auto ret = socket_->recv(data, zmq::recv_flags::none);
 }
 
 
@@ -237,7 +238,7 @@ void buttonrpc::run() {
 
     std::string funname;
     ds >> funname;
-    Serializer* r = this->call_(funname, ds.current(), ds.size() - funname.size());
+    Serializer* r = this->call_(funname, ds.current(), static_cast<int>(ds.size() - funname.size()));
 
     zmq::message_t retmsg(r->size());
     std::memcpy(retmsg.data(), r->data(), r->size());
@@ -375,7 +376,7 @@ inline buttonrpc::value_t<R> buttonrpc::net_call(Serializer& ds) {
   zmq::message_t reply;
   recv(reply);
   value_t<R> val;
-  if (reply.size() == 0) {
+  if (reply.empty()) {
     // timeout
     error_code_ = RPC_ERR_RECV_TIMEOUT;
     val.set_code(RPC_ERR_RECV_TIMEOUT);
@@ -384,7 +385,7 @@ inline buttonrpc::value_t<R> buttonrpc::net_call(Serializer& ds) {
   }
   error_code_ = RPC_ERR_SUCCESS;
   ds.clear();
-  ds.write_raw_data((char*)reply.data(), reply.size());
+  ds.write_raw_data((char*)reply.data(), static_cast<int>(reply.size()));
   ds.reset();
 
   ds >> val;

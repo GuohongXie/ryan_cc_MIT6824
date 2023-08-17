@@ -13,8 +13,8 @@ rm word_count.o
 cd ../main/
 rm mrworker
 rm mrcoordinator
-g++ -std=c++17 mrworker.cc -I../.. -lzmq -pthread -ldl -o mrworker -g -Wall -O0
-g++ -std=c++17 mrcoordinator.cc ../mr/coordinator.cc -I../.. -lzmq -pthread -o mrcoordinator -g -Wall -O0
+g++ -std=c++17 mrworker.cc -I../.. -lzmq -pthread -ldl -o mrworker -g -O0 #-Wall
+g++ -std=c++17 mrcoordinator.cc ../mr/coordinator.cc -I../.. -lzmq -pthread -o mrcoordinator -g -O0 #-Wall 
 
 
 # Use the following command to run all the unit tests

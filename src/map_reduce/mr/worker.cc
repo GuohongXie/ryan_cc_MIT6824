@@ -78,7 +78,7 @@ void Worker::WriteKV(int fd, const KeyValue& kv) {
 /// 由MapWorker函数(线程启动函数)调用
 /// @param kvs map_func产生的输出, 即key:word, value:"1"
 /// @param map_worker_index
-/// 线程所对应的map_task_index，由MapWorker函数(线程启动函数)确定并传进参数于此
+/// 线程所对应的map_worker_index，由MapWorker函数(线程启动函数)确定并传进参数于此
 void Worker::WriteInDisk(const std::vector<KeyValue>& kvs,
                          int map_worker_index) {
   for (const auto& kv : kvs) {

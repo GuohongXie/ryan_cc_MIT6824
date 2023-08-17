@@ -99,7 +99,7 @@ class Worker {  // noncopyable
   static std::vector<KeyValue> MyShuffle(int reduce_task_index);
 
   static void WriteKV(int fd, const KeyValue& kv);
-  void WriteInDisk(const std::vector<KeyValue>& kvs, int map_task_index);
+  void WriteInDisk(const std::vector<KeyValue>& kvs, int map_worker_index);
 
   //"word,1 word,1 word,1 ..." -> ["word,1", "word,1", "word,1", ...]
   static std::vector<std::string> Split(const std::string& text,

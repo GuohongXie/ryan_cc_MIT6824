@@ -45,11 +45,11 @@ class Clerk {
 };
 
 Clerk::Clerk(std::vector<std::vector<int>>& servers) {
-  this->servers_ = servers;
-  this->client_id_ = std::rand() % 10000 + 1;
+  servers_ = servers;
+  client_id_ = std::rand() % 10000 + 1;
   printf("client_id_ is %d\n", client_id_);
-  this->request_id_ = 0;
-  this->leader_id_ = std::rand() % servers.size();
+  request_id_ = 0;
+  leader_id_ = static_cast<int>(std::rand() % servers.size());
 }
 
 std::string Clerk::Get(std::string key) {
@@ -100,24 +100,24 @@ int Clerk::GetCurLeader() {
 // leader不对更换leader
 int Clerk::GetChangeLeader() {
   std::lock_guard<std::mutex> lock(mutex_);
-  leader_id_ = (leader_id_ + 1) % servers_.size();
+  leader_id_ = (leader_id_ + 1) % static_cast<int>(servers_.size());
   int new_leader = leader_id_;
   return new_leader;
 }
 
 void Clerk::Put(std::string key, std::string value) {
-  PutAppend(key, value, "Put");
+  PutAppend(std::move(key), std::move(value), "Put");
 }
 
 void Clerk::Append(std::string key, std::string value) {
-  PutAppend(key, value, "Append");
+  PutAppend(std::move(key), std::move(value), "Append");
 }
 
 void Clerk::PutAppend(std::string key, std::string value, std::string op) {
   PutAppendArgs args;
-  args.key = key;
-  args.value = value;
-  args.op = op;
+  args.key = std::move(key);
+  args.value = std::move(value);
+  args.op = std::move(op);
   args.client_id = client_id_;
   args.request_id = GetCurRequestId();
   int cur_leader = GetCurLeader();

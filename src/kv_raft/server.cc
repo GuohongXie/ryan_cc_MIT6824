@@ -48,7 +48,7 @@ class KVServer {
 
   std::string GetSnapShot();  //将kvServer的状态信息转化为snapShot
   void RecoverySnapShot(
-      std::string
+      const std::string&
           snapshot);  //将从raft层获得的快照安装到kvServer即应用层中(必然已经落后其他的server了，或者是初始化)
 
   //---------------------------Test----------------------------
@@ -60,14 +60,14 @@ class KVServer {
   std::mutex mutex_;
   std::condition_variable cond_;
   Raft raft_;
-  int id_;
+  int id_{};
   std::vector<int> port_;
-  int curr_port_id_;
+  int curr_port_id_{};
 
   // bool dead;
 
-  int max_raft_state_;  //超过这个大小就快照
-  int last_applied_index_;
+  int max_raft_state_{};  //超过这个大小就快照
+  int last_applied_index_{};
 
   std::unordered_map<std::string, std::string> database_;  //模拟数据库
   std::unordered_map<int, int>
@@ -297,7 +297,7 @@ void KVServer::ApplyLoop() {
       //保证只有存了上下文信息的leader才能唤醒管道，回应clerk的RPC请求(leader需要多做的工作)
       if (isOpExist) {
         int fd = ::open(opctx->fifo_name.c_str(), O_WRONLY);
-        char* buf = "12345";
+        char buf[] = "12345";
         ::write(fd, buf, strlen(buf) + 1);
         ::close(fd);
       }
@@ -341,7 +341,7 @@ void KVServer::SnapShotLoop() {
           snapshot,
           lastIncluedIndex);  //向raft层发送快照用于日志压缩，同时持久化
       printf("%d called recvsnapShot size is %d, lastapply is %d\n", id_,
-             snapshot.size(), last_applied_index_);
+             static_cast<int>(snapshot.size()), last_applied_index_);
     }
     ::usleep(10000);
   }
@@ -365,7 +365,7 @@ std::vector<KVServerInfo> GetKvServerPort(int num) {
 
 std::vector<PeersInfo> KVServer::GetRaftPort(
     std::vector<KVServerInfo>& kv_info) {
-  int n = kv_info.size();
+  size_t n = kv_info.size();
   std::vector<PeersInfo> ret(n);
   for (int i = 0; i < n; i++) {
     ret[i] = kv_info[i].peers_info;
@@ -373,65 +373,65 @@ std::vector<PeersInfo> KVServer::GetRaftPort(
   return ret;
 }
 
-void KVServer::RecoverySnapShot(std::string snapshot) {
+void KVServer::RecoverySnapShot(const std::string& snapshot) {
   printf("recovery is called\n");
-  std::vector<std::string> str;
+  std::vector<std::string> strs;
   std::string tmp;
   for (char c : snapshot) {
     if (c != ';') {
       tmp += c;
     } else {
       if (!tmp.empty()) {
-        str.push_back(tmp);
+        strs.push_back(tmp);
         tmp = "";
       }
     }
   }
-  if (!tmp.empty()) str.push_back(tmp);
+  if (!tmp.empty()) strs.push_back(tmp);
   tmp = "";
-  std::vector<std::string> kvData, clientSeq;
-  for (int i = 0; i < str[0].size(); i++) {
-    if (str[0][i] != '.') {
-      tmp += str[0][i];
+  std::vector<std::string> kv_datas, clients_seq;
+  for (int i = 0; i < strs[0].size(); i++) {
+    if (strs[0][i] != '.') {
+      tmp += strs[0][i];
     } else {
       if (!tmp.empty()) {
-        kvData.push_back(tmp);
+        kv_datas.push_back(tmp);
         tmp = "";
       }
     }
   }
-  for (int i = 0; i < str[1].size(); i++) {
-    if (str[1][i] != '.') {
-      tmp += str[1][i];
+  for (int i = 0; i < strs[1].size(); i++) {
+    if (strs[1][i] != '.') {
+      tmp += strs[1][i];
     } else {
       if (!tmp.empty()) {
-        clientSeq.push_back(tmp);
+        clients_seq.push_back(tmp);
         tmp = "";
       }
     }
   }
-  for (int i = 0; i < kvData.size(); i++) {
+  for (auto& kv_data : kv_datas) {
     tmp = "";
     int j = 0;
-    for (; j < kvData[i].size(); j++) {
-      if (kvData[i][j] != ' ') {
-        tmp += kvData[i][j];
+    for (; j < kv_data.size(); j++) {
+      if (kv_data[j] != ' ') {
+        tmp += kv_data[j];
       } else
         break;
     }
-    std::string value(kvData[i].begin() + j + 1, kvData[i].end());
+    std::string value(kv_data.begin() + j + 1, kv_data.end());
     database_[tmp] = value;
   }
-  for (int i = 0; i < clientSeq.size(); i++) {
+  for (auto& client : clients_seq) {
     tmp = "";
     int j = 0;
-    for (; j < clientSeq[i].size(); j++) {
-      if (clientSeq[i][j] != ' ') {
-        tmp += clientSeq[i][j];
+    for (; j < client.size(); j++) {
+      if (client[j] != ' ') {
+        tmp += client[j];
       } else
         break;
     }
-    std::string value(clientSeq[i].begin() + j + 1, clientSeq[i].end());
+    std::string value(client.begin() + j + 1, client.end());
     client_seq_map_[std::stoi(tmp)] = std::stoi(value);
   }
   printf("-----------------databegin---------------------------\n");
