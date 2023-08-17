@@ -1,0 +1,2 @@
+1. 文件也是资源，打开了文件就必须调用::close(fd);来关闭文件
+   不然报错：“too many opened files”

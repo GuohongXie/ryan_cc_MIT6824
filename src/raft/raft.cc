@@ -17,17 +17,18 @@ constexpr int HEART_BEART_PERIOD = 100000;
 
 //需要结合LAB3实现应用层dataBase和Raft交互用的，通过getCmd()转化为applyMsg的command
 //实际上这只是LAB2的raft.hpp，在LAB3中改了很多，LAB4又改了不少，所以每个LAB都引了单独的raft.hpp
-struct Operation {
-  std::string GetCmd() const {
-    std::string cmd = op + " " + key + " " + value;
-    return cmd;
-  }
 
+
+struct Operation {
   std::string op;
   std::string key;
   std::string value;
   int client_id{-1};
   int request_id{-1};
+  std::string GetCmd() const {
+    std::string cmd = op + " " + key + " " + value;
+    return cmd;
+  }
 };
 
 //通过传入raft.Start()得到的返回值，封装成类
@@ -47,7 +48,7 @@ struct ApplyMsg {
 //为了减轻负担，一个选举，一个日志同步，分开来
 struct PeersInfo {
   std::pair<int, int> port;  //选举端口和日志同步端口
-  int peer_id_{-1}; //当前raft节点的ID
+  int peer_id{-1}; //当前raft节点的ID
 };
 
 //日志
@@ -59,11 +60,12 @@ struct LogEntry {
   int term{-1};
 };
 
+//2C
 //持久化类，LAB2中需要持久化的内容就这3个，后续会修改
 struct Persister {
   std::vector<LogEntry> logs;
-  int curr_term_{-1};
-  int voted_for_{-1};
+  int curr_term{-1};
+  int voted_for{-1};
 };
 
 struct AppendEntriesArgs {
@@ -111,7 +113,10 @@ struct RequestVoteReply {
 
 class Raft {
  public:
-  void Make(const std::vector<PeersInfo>& peers, int id);  // raft初始化
+
+  // raft初始化
+  //lab2中的要求，peers是所有raft节点的信息，id是当前raft节点的ID
+  void Make(const std::vector<PeersInfo>& peers, int id);  
 
   enum RAFT_STATE {
     LEADER = 0,
@@ -147,8 +152,8 @@ class Raft {
 
   void Serialize();      //序列化
   bool Deserialize();    //反序列化
-  void SaveRaftState();  //持久化
-  void ReadRaftState();  //读取持久化状态
+  void SaveRaftState();  //持久化, 2C
+  void ReadRaftState();  //读取持久化状态, 2C
   bool IsKilled();       //->check is killed?
   void Kill();  //设定raft状态为dead，LAB3B快照测试时会用到
 
@@ -163,15 +168,19 @@ class Raft {
   int peer_id_;
   int is_dead_;
 
-  //需要持久化的data
-  int curr_term_;
-  int voted_for_;
+  //需要持久化的state
+  int curr_term_; //服务器已知的最新任期（初始化为 0，持续递增）
+  int voted_for_; //在当前获得选票的候选人的 Id
   std::vector<LogEntry> logs_;
 
+  //所有服务器上的易失性状态
+  int last_applied_; //已知的最大的已经被提交的日志条目的索引值
+  int commit_index_;
+
+  //leader上的易失性状态
   std::vector<int> next_index_;
   std::vector<int> match_index_;
-  int last_applied_;
-  int commit_index_;
+
 
   int recv_votes_;
   int finished_vote_;
@@ -187,7 +196,7 @@ class Raft {
 void Raft::Make(const std::vector<PeersInfo>& peers, int id) {
   peers_ = peers;
   peer_id_ = id;
-  is_dead_ = 0;
+  is_dead_ = false;
 
   state_ = FOLLOWER;
   curr_term_ = 0;
@@ -199,7 +208,7 @@ void Raft::Make(const std::vector<PeersInfo>& peers, int id) {
   finished_vote_ = 0;
   curr_peer_id_ = 0;
 
-  last_applied_ = 0;
+  last_applied_ = 0; //初始化为0， 单调递增
   commit_index_ = 0;
   next_index_.resize(peers.size(), 1);
   match_index_.resize(peers.size(), 0);
@@ -233,8 +242,9 @@ int Raft::GetMyduration(const timeval& last) {
   return ((now.tv_sec - last.tv_sec) * 1000000 + (now.tv_usec - last.tv_usec));
 }
 
-//稍微解释下-200000us是因为让记录的m_lastBroadcastTime变早，这样在appendLoop中getMyduration(last_broadcast_time_)直接达到要求
-//因为心跳周期是100000us
+//稍微解释下-200000us是因为让记录的last_broadcast_time_变早，
+//这样在AppendLoop中GetMyduration(last_broadcast_time_)直接达到要求
+//因为心跳周期是100,000 us
 void Raft::SetBroadcastTime() {
   ::gettimeofday(&last_broadcast_time_, nullptr);
   printf("before : %ld, %ld\n", last_broadcast_time_.tv_sec,
@@ -249,7 +259,7 @@ void Raft::SetBroadcastTime() {
 
 void Raft::ListenForVote() {
   buttonrpc server;
-  server.as_server(this->peers_[this->peer_id_].port.first);
+  server.as_server(peers_[peer_id_].port.first);
   server.bind("RequestVote", &Raft::RequestVote, this);
 
   std::thread election_thread(&Raft::ElectionLoop, this);
@@ -273,8 +283,8 @@ void Raft::ListenForAppend() {
 
 void Raft::ElectionLoop() {
   bool resetFlag = false;
-  while (!this->is_dead_) {
-    int time_out = ::rand() % 200000 + 200000;
+  while (!is_dead_) {
+    int time_out = ::rand() % 200000 + 200000; //随机化选举超时时间
     while (true) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       std::unique_lock<std::mutex> lock(mutex_);
@@ -299,7 +309,7 @@ void Raft::ElectionLoop() {
 
         std::vector<std::thread> threads;
         for (auto& server : peers_) {
-          if (server.peer_id_ == peer_id_) continue;
+          if (server.peer_id == peer_id_) continue;
           std::thread(&Raft::CallRequestVote, this).detach();
         }
 
@@ -388,17 +398,19 @@ bool Raft::CheckLogUptodate(int term, int index) {
   return false;
 }
 
+/// @brief Follower和Candidate在收到RPC时，都会调用这个函数
 RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
   RequestVoteReply reply;
   reply.vote_granted = false;
   std::unique_lock<std::mutex> lock(mutex_);
+  //但凡涉及到对共享数据的读写，都需要加锁
   reply.term = curr_term_;
 
   if (curr_term_ > args.term) {
     return reply;
   }
 
-  if (curr_term_ < args.term) {
+  if (curr_term_ < args.term) { // TODO: <= ?
     state_ = FOLLOWER;
     curr_term_ = args.term;
     voted_for_ = -1;
@@ -422,7 +434,7 @@ RequestVoteReply Raft::RequestVote(RequestVoteArgs args) {
 
 void Raft::ProcessEntriesLoop() {
   //Raft* raft = static_cast<Raft*>(arg);
-  while (!this->is_dead_) {
+  while (!is_dead_) {
     ::usleep(1000);
     std::unique_lock<std::mutex> lock(mutex_);
     if (state_ != LEADER) {
@@ -443,7 +455,7 @@ void Raft::ProcessEntriesLoop() {
     lock.unlock();
 
     for (const auto& server : this->peers_) {
-      if (server.peer_id_ == this->peer_id_) continue;
+      if (server.peer_id == this->peer_id_) continue;
       std::thread(&Raft::SendAppendEntries, this).detach();
     }
   }
@@ -545,13 +557,6 @@ void Raft::SendAppendEntries() {
   }
 
   if (!reply.success) {
-    // if(!m_firstIndexOfEachTerm.count(reply.conflict_term)){
-    //     next_index_[clientPeerId]--;
-    // }else{
-    //     next_index_[clientPeerId] = min(reply.conflict_index,
-    //     m_firstIndexOfEachTerm[reply.conflict_term]);
-    // }
-
     if (reply.conflict_term != -1) {
       int leader_conflict_index = -1;
       for (int index = args.prev_log_index; index >= 1; index--) {
@@ -670,7 +675,7 @@ std::pair<int, bool> Raft::GetState() {
   return serverState;
 }
 
-void Raft::Kill() { is_dead_ = 1; }
+void Raft::Kill() { is_dead_ = true; }
 
 StartRet Raft::Start(Operation op) {
   StartRet ret;
@@ -692,30 +697,45 @@ StartRet Raft::Start(Operation op) {
 }
 
 void Raft::PrintLogs() {
-  for (auto a : logs_) {
+  for (const auto& a : logs_) {
     printf("logs : %d\n", a.term);
   }
   std::cout << std::endl;
 }
 
+/// @brief 在SaveRaftState()中调用，用于序列化当前raft节点的状态
+/// 并将当前raft节点的状态保存到磁盘中
+/// 保存的内容包括：persister_.curr_term, persister_.voted_for, persister_.logs
 void Raft::Serialize() {
   std::string str;
-  str += std::to_string(this->persister_.curr_term_) + ";" +
-         std::to_string(this->persister_.voted_for_) + ";";
+  str += std::to_string(this->persister_.curr_term) + ";" +
+         std::to_string(this->persister_.voted_for) + ";\n";
   for (const auto& log : this->persister_.logs) {
-    str += log.command + "," + std::to_string(log.term) + ".";
+    // "\n"作为日志的分隔符
+    str += log.command + ", " + std::to_string(log.term) + "\n";
   }
   std::string filename = "persister_-" + std::to_string(peer_id_);
+  //以只写方式打开文件(不能从文件读数据)，若文件不存在则创建，
+  //文件权限为0664, 0表示八进制, 0664 = 110 110 100
   int fd = ::open(filename.c_str(), O_WRONLY | O_CREAT, 0664);
   if (fd == -1) {
     std::perror("open");
     std::exit(-1);
   }
   int len = ::write(fd, str.c_str(), str.size());
+  if (len == -1) {
+    std::perror("write");
+    ::close(fd);  // 无论如何都需要关闭文件，所以这里也需要关闭。
+    std::exit(-1);
+  }
+  ::close(fd);  // 正常关闭文件
 }
 
+/// @brief 从磁盘中读取保存的状态
 bool Raft::Deserialize() {
   std::string filename = "persister_-" + std::to_string(peer_id_);
+
+  // 从磁盘中读取保存的状态
   if (::access(filename.c_str(), F_OK) == -1) return false;
   int fd = ::open(filename.c_str(), O_RDONLY);
   if (fd == -1) {
@@ -729,8 +749,12 @@ bool Raft::Deserialize() {
   int len = ::read(fd, buf, length);
   if (len != length) {
     perror("read");
+    ::close(fd);  //无论如何都需要关闭文件，所以这里也需要关闭
     exit(-1);
   }
+  ::close(fd);  //正常关闭文件
+
+  //将读取到的数据反序列化, 解析出来的数据保存到persister_中
   std::string content(buf);
   std::vector<std::string> persist;
   std::string tmp{};
@@ -743,42 +767,45 @@ bool Raft::Deserialize() {
     }
   }
   persist.push_back(tmp);
-  this->persister_.curr_term_ = atoi(persist[0].c_str());
-  this->persister_.voted_for_ = atoi(persist[1].c_str());
-  std::vector<std::string> log;
+  this->persister_.curr_term = std::stoi(persist[0]);
+  this->persister_.voted_for = std::stoi(persist[1]);
+  std::vector<std::string> logs_str;
   std::vector<LogEntry> logs;
   tmp = "";
-  for (int i = 0; i < persist[2].size(); i++) {
-    if (persist[2][i] != '.') {
+  for (int i = 1; i < persist[2].size(); i++) {
+    if (persist[2][i] != '\n') {
       tmp += persist[2][i];
     } else {
-      if (tmp.size() != 0) log.push_back(tmp);
+      if (!tmp.empty()) logs_str.push_back(tmp);
       tmp = "";
     }
   }
-  for (int i = 0; i < log.size(); i++) {
+  for (auto & i : logs_str) {
     tmp = "";
     int j = 0;
-    for (; j < log[i].size(); j++) {
-      if (log[i][j] != ',') {
-        tmp += log[i][j];
+    for (; j < i.size(); j++) {
+      if (i[j] != ',') {
+        tmp += i[j];
       } else
         break;
     }
-    std::string number(log[i].begin() + j + 1, log[i].end());
-    int num = std::atoi(number.c_str());
+    std::string number(i.begin() + j + 1, i.end());
+    int num = std::stoi(number);
     logs.emplace_back(tmp, num);
   }
   this->persister_.logs = logs;
   return true;
 }
 
+/// @brief 读取持久化状态
 void Raft::ReadRaftState() {
   //只在初始化的时候调用，没必要加锁，因为run()在其之后才执行
   bool ret = this->Deserialize();
+  // TODO: 读取持久化状态失败的错误处理
   if (!ret) return;
-  this->curr_term_ = this->persister_.curr_term_;
-  this->voted_for_ = this->persister_.voted_for_;
+
+  this->curr_term_ = this->persister_.curr_term;
+  this->voted_for_ = this->persister_.voted_for;
 
   for (const auto& log : this->persister_.logs) {
     PushBackLog(log);
@@ -788,10 +815,10 @@ void Raft::ReadRaftState() {
 }
 
 void Raft::SaveRaftState() {
-  persister_.curr_term_ = curr_term_;
-  persister_.voted_for_ = voted_for_;
+  persister_.curr_term = curr_term_;
+  persister_.voted_for = voted_for_;
   persister_.logs = logs_;
-  Serialize();
+  this->Serialize();
 }
 
 int main(int argc, char* argv[]) {
@@ -809,11 +836,9 @@ int main(int argc, char* argv[]) {
   std::srand((unsigned)std::time(nullptr));
   std::vector<PeersInfo> peers(peers_num);
   for (int i = 0; i < peers_num; i++) {
-    peers[i].peer_id_ = i;
+    peers[i].peer_id = i;
     peers[i].port.first = COMMOM_PORT + i;                  // vote的RPC端口
     peers[i].port.second = COMMOM_PORT + i + peers.size();  // append的RPC端口
-    // printf(" id : %d port1 : %d, port2 : %d\n", peers[i].peer_id_,
-    // peers[i].port.first, peers[i].port.second);
   }
 
   std::vector<std::unique_ptr<Raft>> rafts;
@@ -826,8 +851,8 @@ int main(int argc, char* argv[]) {
   //------------------------------test部分--------------------------
   ::usleep(400000);
   for (int i = 0; i < peers_num; i++) {
-    if (rafts[i]->GetState().second) {
-      for (int j = 0; j < 1000; j++) {
+    if (rafts[i]->GetState().second) { //如果不是主节点
+      for (int j = 0; j < 100; j++) {
         Operation opera;
         opera.op = "put";
         opera.key = std::to_string(j);
@@ -841,8 +866,9 @@ int main(int argc, char* argv[]) {
   ::usleep(400000);
   for (int i = 0; i < peers.size(); i++) {
     if (rafts[i]->GetState().second) {
-      rafts[i]
-          ->Kill();  // kill后选举及心跳的线程会宕机，会产生新的leader，很久之后了，因为上面传了1000条日志
+      // kill后选举及心跳的线程会宕机，会产生新的leader，
+      // 很久之后了，因为上面传了1000条日志
+      rafts[i]->Kill();  
       break;
     }
   }

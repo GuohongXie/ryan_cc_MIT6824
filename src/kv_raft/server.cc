@@ -432,7 +432,7 @@ void KVServer::RecoverySnapShot(std::string snapshot) {
         break;
     }
     std::string value(clientSeq[i].begin() + j + 1, clientSeq[i].end());
-    client_seq_map_[atoi(tmp.c_str())] = atoi(value.c_str());
+    client_seq_map_[std::stoi(tmp)] = std::stoi(value);
   }
   printf("-----------------databegin---------------------------\n");
   for (const auto& a : database_) {

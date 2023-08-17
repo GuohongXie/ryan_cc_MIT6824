@@ -3,3 +3,9 @@
 3. static memfunc 和 static memvar 的语义有很大区别，
    static memfunc 表明函数不对类的成员变量进行操作，或者只对static memvar操作。
    static memvar则表示由类的所有对象所共享的状态或量。
+4. 为了保证生成文件的原子性，可以先将文件写入一个临时的tmp文件，然后通过系统调用来改名
+5. 一个特点是coordinator没有维护worker的状态(即worker是stateless的)，用了一个队列和一个哈希表来维护任务的状态。
+   以map任务为例(map和reduce处理任务的方式相似), 待完成的task在map_task_queue_(std::queue)中，
+   已完成的task加入finished_map_task_(std::unordered_map)中。当有MapWorker来请求任务时
+   就从map_task_queue_中取出一个返回，同时启动一个定时线程，经过MAP_TASK_TIMEOUT之后
+   如果在finished_map_task_中没有检测到该task，就认为worker宕机了，则重新将该任务加入map_task_queue_
