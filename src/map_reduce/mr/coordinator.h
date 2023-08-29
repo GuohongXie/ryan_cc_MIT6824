@@ -3,6 +3,7 @@
 
 #include <unistd.h>  // ::sleep()
 
+#include <condition_variable>
 #include <cstdio>
 #include <mutex>
 #include <queue>
@@ -42,14 +43,12 @@ class Coordinator {
   void WaitReduceTask(
       int reduce_task);  // 判断reduce任务是否超时，超时则将任务重新加入队列
 
-  //虽然对于小对象 char，直接传值更快，因为会使用寄存器传参
-  //但是这里为了能接受如字面值这样的常量，还是传引用
-  static void WaitTime(const char& map_or_reduce_tag);  //用于定时的线程
-
   static constexpr int MAP_TASK_TIMEOUT = 3;
   static constexpr int REDUCE_TASK_TIMEOUT = 5;
 
-  std::mutex mutex_;
+  std::mutex mutex_;  //map和reduce不会同时进行，可以共用一个mutex_(分时复用)
+  std::condition_variable map_cond_;
+  std::condition_variable reduce_cond_;
   int input_file_num_;  //从命令行读取到的文件总数
 
   //在coordinator中设置的map和reduce的worker线程数

@@ -21,8 +21,7 @@ set(CMAKE_CXX_FLAGS"${CMAKE_CXX_FLAGS} ${compile_flags_debug}")
 
 # 添加搜索路径
 include_directories(
-    ${PROJECT_SOURCE_DIR}/src/
-    #${PROJECT_SOURCE_DIR}/src/buttonrpc/depends
+    ${PROJECT_SOURCE_DIR}/src
     )
 
 # 定义cc文件的路径

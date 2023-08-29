@@ -56,28 +56,19 @@ bool Coordinator::IsMapDone() {
   return finished_map_task_.size() == input_file_num_;
 }
 
-void Coordinator::WaitMapTask(const std::string& map_task) {
-  //等待一个超时时间MAP_TASK_TIMEOUT
-  std::thread tid([]() { WaitTime('m'); });
-  tid.join();  // join方式回收实现超时后解除阻塞
 
-  std::lock_guard<std::mutex> lock(mutex_);
-  //若超时后在对应的hashmap中没有该map任务完成的记录，重新将该任务加入工作队列
-  if (finished_map_task_.count(map_task) == 0) {
+void Coordinator::WaitMapTask(const std::string& map_task) {
+  std::unique_lock<std::mutex> lock(mutex_);
+  if(map_cond_.wait_for(lock, std::chrono::seconds(MAP_TASK_TIMEOUT),
+                 [this, &map_task] { return this->finished_map_task_.count(map_task) > 0; })) {
+    // 该任务已完成，不做任何事情
+  } else {
+    // 超时，重新加入队列
     printf("map task : %s is timeout\n", map_task.c_str());
     map_task_queue_.push(map_task);
-    return;
   }
 }
 
-//分map任务还是reduce任务进行不同时间计时的计时线程
-void Coordinator::WaitTime(const char& map_or_reduce_tag) {
-  if (map_or_reduce_tag == 'm') {
-    ::sleep(MAP_TASK_TIMEOUT);
-  } else if (map_or_reduce_tag == 'r') {
-    ::sleep(REDUCE_TASK_TIMEOUT);
-  }
-}
 
 ///////////// reduce //////////////
 /// @brief 分配reduce任务的函数，RPC, called by ReduceWorker
@@ -106,16 +97,17 @@ bool Coordinator::IsAllMapAndReduceDone() {
 }
 
 void Coordinator::WaitReduceTask(int reduce_task) {
-  std::thread t([]() { WaitTime('r'); });
-  t.join();
-  std::lock_guard<std::mutex> lock(mutex_);
-  //若超时后在对应的hashmap中没有该reduce任务完成的记录，将该任务重新加入工作队列
-  if (finished_reduce_task_.find(reduce_task) == finished_reduce_task_.end()) {
-    reduce_task_queue_.push(reduce_task);
+  std::unique_lock<std::mutex> lock(mutex_);
+  if(reduce_cond_.wait_for(lock, std::chrono::seconds(REDUCE_TASK_TIMEOUT),
+                 [this, reduce_task] { return this->finished_reduce_task_.count(reduce_task) > 0; })) {
+    // 该任务已完成，不做任何事情
+  } else {
+    // 超时，重新加入队列
     printf("reduce task : %d is timeout\n", reduce_task);
-    return;
+    reduce_task_queue_.push(reduce_task);
   }
 }
+
 
 ///////////// set task finished //////////////
 
@@ -127,6 +119,7 @@ void Coordinator::WaitReduceTask(int reduce_task) {
 void Coordinator::SetAMapTaskFinished(const std::string& map_task) {
   std::lock_guard<std::mutex> lock(mutex_);
   finished_map_task_.insert(map_task);
+  map_cond_.notify_all();
   printf("map task : %s is finished\n", map_task.c_str());
 }
 
@@ -134,5 +127,6 @@ void Coordinator::SetAMapTaskFinished(const std::string& map_task) {
 void Coordinator::SetAReduceTaskFinished(int reduce_task) {
   std::lock_guard<std::mutex> lock(mutex_);
   finished_reduce_task_.insert(reduce_task);
+  reduce_cond_.notify_all();
   printf("reduce task : %d is finished\n", reduce_task);
 }
